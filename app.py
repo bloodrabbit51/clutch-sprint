@@ -116,7 +116,7 @@ def previous_sprints():
 @app.get("/api/people/list")
 @login_required
 def api_people_list():
-    people = Person.query.filter_by(active=True).order_by(Person.name).all()
+    people = Person.query.filter_by(active=True, created_by=session["user_id"]).order_by(Person.name).all()
     return jsonify([{"id": p.id, "name": p.name} for p in people])
 
 
@@ -127,10 +127,10 @@ def api_people_create():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "Name required"}), 400
-    existing = Person.query.filter_by(name=name).first()
+    existing = Person.query.filter_by(name=name, created_by=session["user_id"]).first()
     if existing:
         return jsonify({"id": existing.id, "name": existing.name})
-    person = Person(name=name)
+    person = Person(name=name, created_by=session["user_id"])
     db.session.add(person)
     db.session.commit()
     return jsonify({"id": person.id, "name": person.name})
@@ -143,6 +143,8 @@ def api_people_delete():
     person = Person.query.get(int(data.get("id")))
     if not person:
         return jsonify({"error": "Not found"}), 404
+    if person.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     person.active = False
     UserStory.query.filter_by(assigned_person_id=person.id).update({"assigned_person_id": None})
     db.session.commit()
@@ -152,7 +154,7 @@ def api_people_delete():
 @app.get("/api/project/list")
 @login_required
 def api_project_list():
-    projects = Project.query.order_by(Project.name).all()
+    projects = Project.query.filter_by(created_by=session["user_id"]).order_by(Project.name).all()
     return jsonify([{"id": p.id, "name": p.name} for p in projects])
 
 
@@ -163,7 +165,7 @@ def api_project_create():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "Name required"}), 400
-    existing = Project.query.filter_by(name=name).first()
+    existing = Project.query.filter_by(name=name, created_by=session["user_id"]).first()
     if existing:
         return jsonify({"id": existing.id, "name": existing.name})
     project = Project(name=name, created_by=session["user_id"])
@@ -187,7 +189,10 @@ def api_sprint_create():
     fixed_days_holiday = int(fixed_raw)
     if end < start:
         return jsonify({"error": "End date must be after start"}), 400
-    name = format_sprint_name(start, end)
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    name = format_sprint_name(project.name, start, end)
     sprint = Sprint(
         name=name,
         project_id=int(project_id),
@@ -209,10 +214,49 @@ def api_sprint_create():
     })
 
 
+@app.post("/api/sprint/update")
+@login_required
+def api_sprint_update():
+    data = request.get_json(force=True)
+    sprint = Sprint.query.get(int(data.get("id")))
+    if not sprint:
+        return jsonify({"error": "Not found"}), 404
+    if sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    project_id = data.get("project_id")
+    start_raw = data.get("start_date")
+    end_raw = data.get("end_date")
+    fixed_raw = data.get("fixed_days_holiday")
+    if not all([project_id, start_raw, end_raw]) or fixed_raw is None:
+        return jsonify({"error": "All fields are required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    start = datetime.strptime(start_raw, "%Y-%m-%d").date()
+    end = datetime.strptime(end_raw, "%Y-%m-%d").date()
+    if end < start:
+        return jsonify({"error": "End date must be after start"}), 400
+    sprint.project_id = int(project_id)
+    sprint.start_date = start
+    sprint.end_date = end
+    sprint.fixed_days_holiday = int(fixed_raw)
+    sprint.name = format_sprint_name(project.name, start, end)
+    db.session.commit()
+    return jsonify({
+        "id": sprint.id,
+        "name": sprint.name,
+        "project_id": sprint.project_id,
+        "is_saved": sprint.is_saved,
+        "start_date": sprint.start_date.isoformat(),
+        "end_date": sprint.end_date.isoformat(),
+        "fixed_days_holiday": sprint.fixed_days_holiday,
+    })
+
+
 @app.get("/api/sprint/current")
 @login_required
 def api_sprint_current():
-    sprint = Sprint.query.order_by(Sprint.created_at.desc()).first()
+    sprint = Sprint.query.filter_by(created_by=session["user_id"]).order_by(Sprint.created_at.desc()).first()
     if not sprint:
         return jsonify(None)
     return jsonify({
@@ -233,6 +277,8 @@ def api_sprint_get():
     sprint = Sprint.query.get(int(sprint_id)) if sprint_id else None
     if not sprint:
         return jsonify(None)
+    if sprint.created_by != session["user_id"]:
+        return jsonify(None)
     return jsonify({
         "id": sprint.id,
         "name": sprint.name,
@@ -251,6 +297,8 @@ def api_sprint_delete():
     sprint = Sprint.query.get(int(data.get("id")))
     if not sprint:
         return jsonify({"error": "Not found"}), 404
+    if sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     UserStory.query.filter_by(sprint_id=sprint.id).delete()
     Holiday.query.filter_by(sprint_id=sprint.id).delete()
     SprintCapacity.query.filter_by(sprint_id=sprint.id).delete()
@@ -266,6 +314,8 @@ def api_sprint_save():
     sprint = Sprint.query.get(int(data.get("sprint_id")))
     if not sprint:
         return jsonify({"error": "Not found"}), 404
+    if sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     entries = data.get("entries", [])
     SprintCapacity.query.filter_by(sprint_id=sprint.id).delete()
     for entry in entries:
@@ -286,7 +336,7 @@ def api_sprint_save():
 @app.get("/api/sprint/list_saved")
 @login_required
 def api_sprint_list_saved():
-    sprints = Sprint.query.filter_by(is_saved=True).order_by(Sprint.saved_at.desc()).all()
+    sprints = Sprint.query.filter_by(is_saved=True, created_by=session["user_id"]).order_by(Sprint.saved_at.desc()).all()
     return jsonify([
         {
             "id": s.id,
@@ -305,6 +355,9 @@ def api_sprint_list_saved():
 def api_capacity_get():
     sprint_id = request.args.get("sprint_id")
     if not sprint_id:
+        return jsonify([])
+    sprint = Sprint.query.get(int(sprint_id))
+    if not sprint or sprint.created_by != session["user_id"]:
         return jsonify([])
     entries = SprintCapacity.query.filter_by(sprint_id=int(sprint_id)).all()
     return jsonify([
@@ -357,8 +410,11 @@ def count_working_days(start, end):
 @app.get("/api/userstory/list")
 @login_required
 def api_userstory_list():
-    sprint = Sprint.query.order_by(Sprint.created_at.desc()).first()
-    if not sprint:
+    sprint_id = request.args.get("sprint_id")
+    if not sprint_id:
+        return jsonify([])
+    sprint = Sprint.query.get(int(sprint_id))
+    if not sprint or sprint.created_by != session["user_id"]:
         return jsonify([])
     stories = UserStory.query.filter_by(sprint_id=sprint.id).all()
     return jsonify([
@@ -378,6 +434,9 @@ def api_userstory_list():
 def api_userstory_create():
     data = request.get_json(force=True)
     sprint_id = int(data.get("sprint_id"))
+    sprint = Sprint.query.get(sprint_id)
+    if not sprint or sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     name = (data.get("name") or "").strip()
     story_points = int(data.get("story_points", 0))
     if not name or story_points <= 0:
@@ -401,6 +460,9 @@ def api_userstory_update():
     story = UserStory.query.get(int(data.get("id")))
     if not story:
         return jsonify({"error": "Not found"}), 404
+    sprint = Sprint.query.get(story.sprint_id)
+    if not sprint or sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     story.assigned_person_id = data.get("assigned_person_id")
     story.status = data.get("status", story.status)
     db.session.commit()
@@ -414,13 +476,17 @@ def api_userstory_delete():
     story = UserStory.query.get(int(data.get("id")))
     if not story:
         return jsonify({"error": "Not found"}), 404
+    sprint = Sprint.query.get(story.sprint_id)
+    if not sprint or sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
     db.session.delete(story)
     db.session.commit()
     return jsonify({"ok": True})
 
 
-def format_sprint_name(start, end):
-    return f"IDSM_{start.day:02d}_{start.month:02d}_{start.year}_to_{end.day:02d}_{end.month:02d}_{end.year}"
+def format_sprint_name(project_name, start, end):
+    safe_project = project_name.replace(" ", "_")
+    return f"{safe_project}_{start.day:02d}_{start.month:02d}_{start.year}_to_{end.day:02d}_{end.month:02d}_{end.year}"
 
 
 if __name__ == "__main__":

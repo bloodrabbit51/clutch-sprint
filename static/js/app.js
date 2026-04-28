@@ -124,7 +124,7 @@ async function loadStories() {
     return;
   }
 
-  storiesCache = await fetchJson("/api/userstory/list");
+  storiesCache = await fetchJson(`/api/userstory/list?sprint_id=${currentSprint.id}`);
   storiesCache.forEach((story) => {
     const row = document.createElement("tr");
     row.dataset.storyId = story.id;
@@ -277,8 +277,15 @@ async function renderProjectOptions() {
   });
 }
 
-function formatSprintName(start, end) {
-  if (!start || !end) return "";
+async function renderProjectOptionsSelected(selectedId) {
+  await renderProjectOptions();
+  const select = document.getElementById("sprintProject");
+  if (!select) return;
+  select.value = selectedId ? String(selectedId) : "";
+}
+
+function formatSprintName(projectName, start, end) {
+  if (!projectName || !start || !end) return "";
   const startDate = new Date(start);
   const endDate = new Date(end);
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
@@ -290,15 +297,18 @@ function formatSprintName(start, end) {
   const edd = String(endDate.getDate()).padStart(2, "0");
   const emm = String(endDate.getMonth() + 1).padStart(2, "0");
   const eyyyy = String(endDate.getFullYear());
-  return `IDSM_${sdd}_${smm}_${syyyy}_to_${edd}_${emm}_${eyyyy}`;
+  const safeProject = projectName.trim().replace(/\s+/g, "_");
+  return `${safeProject}_${sdd}_${smm}_${syyyy}_to_${edd}_${emm}_${eyyyy}`;
 }
 
 function updateSprintNameField() {
+  const projectSelect = document.getElementById("sprintProject");
+  const projectName = projectSelect?.selectedOptions?.[0]?.textContent || "";
   const start = document.getElementById("sprintStart").value;
   const end = document.getElementById("sprintEnd").value;
   const nameField = document.getElementById("sprintName");
   if (!nameField) return;
-  nameField.value = formatSprintName(start, end);
+  nameField.value = formatSprintName(projectName, start, end);
 }
 
 function updateSprintHeading() {
@@ -318,6 +328,31 @@ function updateSprintToggleButton() {
     button.textContent = "Create New Sprint";
     button.classList.remove("btn-danger");
     button.classList.add("btn-primary");
+  }
+}
+
+function updateEditButton() {
+  const button = document.getElementById("editSprintBtn");
+  if (!button) return;
+  if (currentSprint && !isViewOnly) {
+    button.removeAttribute("hidden");
+  } else {
+    button.setAttribute("hidden", "hidden");
+  }
+}
+
+function setSprintModalMode(mode) {
+  const title = document.getElementById("sprintModalTitle");
+  const actionBtn = document.getElementById("createSprintBtn");
+  if (!title || !actionBtn) return;
+  if (mode === "edit") {
+    title.textContent = "Edit Sprint";
+    actionBtn.textContent = "Update Sprint";
+    actionBtn.dataset.mode = "edit";
+  } else {
+    title.textContent = "Create New Sprint";
+    actionBtn.textContent = "Create Sprint";
+    actionBtn.dataset.mode = "create";
   }
 }
 
@@ -370,6 +405,7 @@ async function initSprintPlan() {
   const createPersonBtn = document.getElementById("createPersonBtn");
   const createStoryBtn = document.getElementById("createStoryBtn");
   const saveSprintBtn = document.getElementById("saveSprintBtn");
+  const editSprintBtn = document.getElementById("editSprintBtn");
   const sprintStart = document.getElementById("sprintStart");
   const sprintEnd = document.getElementById("sprintEnd");
   const sprintContainer = document.getElementById("sprintHeading");
@@ -379,8 +415,10 @@ async function initSprintPlan() {
 
   if (createSprintBtn) {
     createSprintBtn.addEventListener("click", async () => {
+      const mode = createSprintBtn.dataset.mode || "create";
       const projectId = document.getElementById("sprintProject").value;
       const payload = {
+        id: currentSprint?.id,
         project_id: projectId,
         name: document.getElementById("sprintName").value || "",
         start_date: document.getElementById("sprintStart").value,
@@ -395,7 +433,8 @@ async function initSprintPlan() {
         alert("Sprint name is required.");
         return;
       }
-      currentSprint = await fetchJson("/api/sprint/create", {
+      const endpoint = mode === "edit" ? "/api/sprint/update" : "/api/sprint/create";
+      currentSprint = await fetchJson(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -404,7 +443,9 @@ async function initSprintPlan() {
       isDirty = true;
       updateSprintHeading();
       updateSprintToggleButton();
+      updateEditButton();
       updateSaveButton();
+      setSprintModalMode("create");
       const sprintModalEl = document.getElementById("sprintModal");
       if (sprintModalEl) {
         const sprintModal = bootstrap.Modal.getInstance(sprintModalEl);
@@ -422,6 +463,7 @@ async function initSprintPlan() {
       if (!currentSprint) {
         await renderProjectOptions();
         updateSprintNameField();
+        setSprintModalMode("create");
         const modal = new bootstrap.Modal(document.getElementById("sprintModal"));
         modal.show();
         return;
@@ -436,6 +478,20 @@ async function initSprintPlan() {
         body: JSON.stringify({ id: currentSprint.id }),
       });
       await resetSprintView();
+    });
+  }
+
+  if (editSprintBtn) {
+    editSprintBtn.addEventListener("click", async () => {
+      if (!currentSprint) return;
+      await renderProjectOptionsSelected(currentSprint.project_id);
+      document.getElementById("sprintStart").value = currentSprint.start_date;
+      document.getElementById("sprintEnd").value = currentSprint.end_date;
+      document.getElementById("fixedHolidays").value = currentSprint.fixed_days_holiday;
+      updateSprintNameField();
+      setSprintModalMode("edit");
+      const modal = new bootstrap.Modal(document.getElementById("sprintModal"));
+      modal.show();
     });
   }
 
@@ -540,12 +596,14 @@ async function initSprintPlan() {
       await updateCapacity();
       await loadStories();
       updateSaveButton();
+      updateEditButton();
       applyViewOnlyMode();
     }
   } else {
     updateSprintHeading();
     updateSprintToggleButton();
     updateSaveButton();
+    updateEditButton();
     applyViewOnlyMode();
   }
 }
