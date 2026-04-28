@@ -1,0 +1,23 @@
+body {
+  background: #f6f7fb;
+}
+
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: #212529;
+  color: #f8f9fa;
+}
+
+.sidebar .nav-link {
+  color: #f8f9fa;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar .nav-link:hover {
+  color: #ffc107;
+}
+
+.table tbody tr td {
+  vertical-align: middle;
+}

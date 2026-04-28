@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 id="sprintHeading" data-sprint-id="{{ sprint_id or '' }}" data-view-only="{{ 'true' if view_only else 'false' }}">Sprint Plan</h2>
+  <div class="d-flex gap-2">
+    <button class="btn btn-success" id="saveSprintBtn" disabled>Save</button>
+    <button class="btn btn-primary" id="sprintToggleBtn">Create New Sprint</button>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title">People Management</h5>
+      <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#peopleModal">Add People</button>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="capacityTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Leaves</th>
+            <th>Available Days</th>
+            <th>Allocation %</th>
+            <th>Total Capacity</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title">User Stories</h5>
+      <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#storyModal">Add User Story</button>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="storyTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Points</th>
+            <th>Assigned</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Sprint Modal -->
+<div class="modal fade" id="sprintModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New Sprint</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Project</label>
+          <select class="form-select" id="sprintProject" required>
+            <option value="">Select project</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Start Date</label>
+          <input type="date" class="form-control" id="sprintStart" required />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">End Date</label>
+          <input type="date" class="form-control" id="sprintEnd" required />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Fixed Days Holiday</label>
+          <input type="number" class="form-control" id="fixedHolidays" value="0" min="0" required />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Sprint Name</label>
+          <input class="form-control" id="sprintName" readonly />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="createSprintBtn">Create Sprint</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- People Modal -->
+<div class="modal fade" id="peopleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add People</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input class="form-control" id="personName" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="createPersonBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- User Story Modal -->
+<div class="modal fade" id="storyModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add User Story</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input class="form-control" id="storyName" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Story Points</label>
+          <input type="number" class="form-control" id="storyPoints" min="1" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="createStoryBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

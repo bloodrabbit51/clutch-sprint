@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Projects</h2>
+  <button class="btn btn-primary" id="createProjectModalBtn" data-bs-toggle="modal" data-bs-target="#projectModal">Add New Project</button>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" id="projectsTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="projectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add New Project</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Project Name</label>
+          <input class="form-control" id="projectName" required />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="createProjectBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
