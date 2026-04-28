@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Project Backlog</h2>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title">Project Backlog</h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-success" id="backlogSaveBtn" disabled>Save</button>
+        <button class="btn btn-outline-danger" id="backlogDeleteBtn" disabled>Delete</button>
+        <button class="btn btn-outline-primary" id="backlogSelectBtn">Create Project BackLog</button>
+      </div>
+    </div>
+    <div class="mt-3" id="backlogProjectInfo">Select a project to start.</div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="backlogListTable">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Saved</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title" id="featureCardTitle">Feature IDs</h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" id="featureCreateBtn" disabled>Create FeatureID</button>
+        <label class="btn btn-outline-secondary mb-0" for="featureCsvInput">
+          Import CSV
+        </label>
+        <input type="file" id="featureCsvInput" accept=".csv" hidden />
+      </div>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="featureTable">
+        <thead>
+          <tr>
+            <th>Feature ID</th>
+            <th>Description</th>
+            <th>Days</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title" id="storyCardTitle">User Stories</h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" id="storyCreateBtn" disabled>Create UserStory</button>
+        <label class="btn btn-outline-secondary mb-0" for="storyCsvInput">
+          Import CSV
+        </label>
+        <input type="file" id="storyCsvInput" accept=".csv" hidden />
+      </div>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="backlogStoryTable">
+        <thead>
+          <tr>
+            <th>Feature ID</th>
+            <th>User Story</th>
+            <th>Size</th>
+            <th>Points</th>
+            <th>Days</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="backlogSelectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create Project BackLog</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Project</label>
+          <select class="form-select" id="backlogProjectSelect" required>
+            <option value="">Select project</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="backlogProjectCreateBtn">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="featureModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="featureModalTitle">Create FeatureID</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Feature/Bug ID</label>
+          <input class="form-control" id="featureKey" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Feature/Bug Description</label>
+          <textarea class="form-control" id="featureDesc" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="featureSaveBtn" data-mode="create">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="backlogStoryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create UserStory</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Feature ID</label>
+          <select class="form-select" id="storyFeatureSelect"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">UserStory Name</label>
+          <input class="form-control" id="storyTitle" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Tshirt Size</label>
+          <select class="form-select" id="storySize">
+            <option value="XS">XS - 2</option>
+            <option value="S">S - 3</option>
+            <option value="M">M - 5</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Days</label>
+          <input class="form-control" id="storyDays" readonly />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="storySaveBtn">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

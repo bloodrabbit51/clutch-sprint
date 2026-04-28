@@ -1,11 +1,26 @@
 from datetime import datetime, timedelta
+import csv
+from io import TextIOWrapper
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, Sprint, Person, Holiday, UserStory, Project, SprintCapacity
+from models import (
+    db,
+    User,
+    Sprint,
+    Person,
+    Holiday,
+    UserStory,
+    Project,
+    SprintCapacity,
+    BacklogFeature,
+    BacklogMeta,
+    BacklogStory,
+)
 
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sprintstream.db"
+app.config["SQLALCHEMY_BINDS"] = {"backlog": "sqlite:///backlog.db"}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "dev-secret-change-me"
 
@@ -107,6 +122,12 @@ def projects():
     return render_template("projects.html")
 
 
+@app.route("/project-plan")
+@login_required
+def project_plan():
+    return render_template("project_plan.html")
+
+
 @app.route("/previous-sprints")
 @login_required
 def previous_sprints():
@@ -156,6 +177,314 @@ def api_people_delete():
 def api_project_list():
     projects = Project.query.filter_by(created_by=session["user_id"]).order_by(Project.name).all()
     return jsonify([{"id": p.id, "name": p.name} for p in projects])
+
+
+@app.get("/api/backlog/project/list")
+@login_required
+def api_backlog_project_list():
+    projects = Project.query.filter_by(created_by=session["user_id"]).order_by(Project.name).all()
+    return jsonify([{"id": p.id, "name": p.name} for p in projects])
+
+
+@app.get("/api/backlog/feature/list")
+@login_required
+def api_backlog_feature_list():
+    project_id = request.args.get("project_id")
+    if not project_id:
+        return jsonify([])
+    features = BacklogFeature.query.filter_by(
+        project_id=int(project_id),
+        created_by=session["user_id"],
+    ).order_by(BacklogFeature.created_at.desc()).all()
+    feature_ids = [f.id for f in features]
+    points_by_feature = {}
+    if feature_ids:
+        rows = (
+            db.session.query(BacklogStory.feature_id, db.func.sum(BacklogStory.story_points))
+            .filter(BacklogStory.feature_id.in_(feature_ids))
+            .group_by(BacklogStory.feature_id)
+            .all()
+        )
+        points_by_feature = {row[0]: int(row[1] or 0) for row in rows}
+    return jsonify([
+        {
+            "id": f.id,
+            "feature_key": f.feature_key,
+            "description": f.description,
+            "days": points_by_feature.get(f.id, 0),
+        }
+        for f in features
+    ])
+
+
+@app.get("/api/backlog/saved/list")
+@login_required
+def api_backlog_saved_list():
+    items = BacklogMeta.query.filter_by(created_by=session["user_id"]).order_by(BacklogMeta.saved_at.desc()).all()
+    return jsonify([
+        {
+            "id": item.id,
+            "project_id": item.project_id,
+            "project_name": item.project_name,
+            "saved_at": item.saved_at.isoformat() if item.saved_at else None,
+        }
+        for item in items
+    ])
+
+
+@app.post("/api/backlog/save")
+@login_required
+def api_backlog_save():
+    data = request.get_json(force=True)
+    project_id = data.get("project_id")
+    if not project_id:
+        return jsonify({"error": "Project required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    meta = BacklogMeta.query.filter_by(
+        project_id=project.id,
+        created_by=session["user_id"],
+    ).first()
+    if not meta:
+        meta = BacklogMeta(
+            project_id=project.id,
+            project_name=project.name,
+            created_by=session["user_id"],
+        )
+        db.session.add(meta)
+    meta.project_name = project.name
+    meta.saved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/backlog/delete")
+@login_required
+def api_backlog_delete():
+    data = request.get_json(force=True)
+    project_id = data.get("project_id")
+    if not project_id:
+        return jsonify({"error": "Project required"}), 400
+    BacklogStory.query.filter_by(project_id=int(project_id)).delete()
+    BacklogFeature.query.filter_by(project_id=int(project_id)).delete()
+    BacklogMeta.query.filter_by(project_id=int(project_id), created_by=session["user_id"]).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/backlog/feature/create")
+@login_required
+def api_backlog_feature_create():
+    data = request.get_json(force=True)
+    project_id = data.get("project_id")
+    feature_key = (data.get("feature_key") or "").strip()
+    description = (data.get("description") or "").strip()
+    if not all([project_id, feature_key, description]):
+        return jsonify({"error": "All fields are required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    feature = BacklogFeature(
+        project_id=project.id,
+        project_name=project.name,
+        feature_key=feature_key,
+        description=description,
+        created_by=session["user_id"],
+    )
+    db.session.add(feature)
+    db.session.commit()
+    return jsonify({"id": feature.id})
+
+
+@app.post("/api/backlog/feature/update")
+@login_required
+def api_backlog_feature_update():
+    data = request.get_json(force=True)
+    feature = BacklogFeature.query.get(int(data.get("id")))
+    if not feature:
+        return jsonify({"error": "Not found"}), 404
+    if feature.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    feature_key = (data.get("feature_key") or "").strip()
+    description = (data.get("description") or "").strip()
+    if not feature_key or not description:
+        return jsonify({"error": "All fields are required"}), 400
+    feature.feature_key = feature_key
+    feature.description = description
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/backlog/feature/delete")
+@login_required
+def api_backlog_feature_delete():
+    data = request.get_json(force=True)
+    feature = BacklogFeature.query.get(int(data.get("id")))
+    if not feature:
+        return jsonify({"error": "Not found"}), 404
+    if feature.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    BacklogStory.query.filter_by(feature_id=feature.id).delete()
+    db.session.delete(feature)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/backlog/feature/import")
+@login_required
+def api_backlog_feature_import():
+    project_id = request.form.get("project_id")
+    csv_file = request.files.get("file")
+    if not project_id or not csv_file:
+        return jsonify({"error": "Project and file are required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    wrapper = TextIOWrapper(csv_file.stream, encoding="utf-8")
+    reader = csv.reader(wrapper)
+    first = True
+    created = 0
+    for row in reader:
+        if first:
+            first = False
+            continue
+        if len(row) < 2:
+            continue
+        feature_key = (row[0] or "").strip()
+        description = (row[1] or "").strip()
+        if not feature_key or not description:
+            continue
+        db.session.add(
+            BacklogFeature(
+                project_id=project.id,
+                project_name=project.name,
+                feature_key=feature_key,
+                description=description,
+                created_by=session["user_id"],
+            )
+        )
+        created += 1
+    db.session.commit()
+    return jsonify({"created": created})
+
+
+@app.get("/api/backlog/story/list")
+@login_required
+def api_backlog_story_list():
+    project_id = request.args.get("project_id")
+    if not project_id:
+        return jsonify([])
+    stories = BacklogStory.query.filter_by(
+        project_id=int(project_id),
+        created_by=session["user_id"],
+    ).order_by(BacklogStory.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "feature_id": s.feature_id,
+            "name": s.name,
+            "tshirt_size": s.tshirt_size,
+            "story_points": s.story_points,
+            "days": s.days,
+        }
+        for s in stories
+    ])
+
+
+@app.post("/api/backlog/story/create")
+@login_required
+def api_backlog_story_create():
+    data = request.get_json(force=True)
+    feature_id = data.get("feature_id")
+    name = (data.get("name") or "").strip()
+    tshirt_size = (data.get("tshirt_size") or "").strip().upper()
+    if not all([feature_id, name, tshirt_size]):
+        return jsonify({"error": "All fields are required"}), 400
+    feature = BacklogFeature.query.get(int(feature_id))
+    if not feature or feature.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid feature"}), 400
+    size_map = {"XS": 2, "S": 3, "M": 5}
+    if tshirt_size not in size_map:
+        return jsonify({"error": "Invalid size"}), 400
+    points = size_map[tshirt_size]
+    story = BacklogStory(
+        project_id=feature.project_id,
+        feature_id=feature.id,
+        name=name,
+        tshirt_size=tshirt_size,
+        story_points=points,
+        days=points,
+        created_by=session["user_id"],
+    )
+    db.session.add(story)
+    db.session.commit()
+    return jsonify({"id": story.id})
+
+
+@app.post("/api/backlog/story/import")
+@login_required
+def api_backlog_story_import():
+    project_id = request.form.get("project_id")
+    csv_file = request.files.get("file")
+    if not project_id or not csv_file:
+        return jsonify({"error": "Project and file are required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    features = BacklogFeature.query.filter_by(
+        project_id=project.id,
+        created_by=session["user_id"],
+    ).all()
+    feature_map = {f.feature_key: f for f in features}
+    wrapper = TextIOWrapper(csv_file.stream, encoding="utf-8")
+    reader = csv.reader(wrapper)
+    first = True
+    created = 0
+    size_map = {"XS": 2, "S": 3, "M": 5}
+    for row in reader:
+        if first:
+            first = False
+            continue
+        if len(row) < 3:
+            continue
+        feature_key = (row[0] or "").strip()
+        name = (row[1] or "").strip()
+        tshirt_size = (row[2] or "").strip().upper()
+        if not feature_key or not name or tshirt_size not in size_map:
+            continue
+        feature = feature_map.get(feature_key)
+        if not feature:
+            continue
+        points = size_map[tshirt_size]
+        db.session.add(
+            BacklogStory(
+                project_id=project.id,
+                feature_id=feature.id,
+                name=name,
+                tshirt_size=tshirt_size,
+                story_points=points,
+                days=points,
+                created_by=session["user_id"],
+            )
+        )
+        created += 1
+    db.session.commit()
+    return jsonify({"created": created})
+
+
+@app.post("/api/backlog/story/delete")
+@login_required
+def api_backlog_story_delete():
+    data = request.get_json(force=True)
+    story = BacklogStory.query.get(int(data.get("id")))
+    if not story:
+        return jsonify({"error": "Not found"}), 404
+    if story.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    db.session.delete(story)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/project/create")

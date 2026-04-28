@@ -670,4 +670,412 @@ document.addEventListener("DOMContentLoaded", () => {
   if (document.getElementById("previousSprintsTable")) {
     initPreviousSprints();
   }
+  if (document.getElementById("featureTable")) {
+    initProjectPlan();
+  }
 });
+
+async function initProjectPlan() {
+  const backlogSelectBtn = document.getElementById("backlogSelectBtn");
+  const backlogProjectCreateBtn = document.getElementById("backlogProjectCreateBtn");
+  const backlogProjectSelect = document.getElementById("backlogProjectSelect");
+  const backlogInfo = document.getElementById("backlogProjectInfo");
+  const backlogSaveBtn = document.getElementById("backlogSaveBtn");
+  const backlogDeleteBtn = document.getElementById("backlogDeleteBtn");
+  const backlogListBody = document.querySelector("#backlogListTable tbody");
+  const featureCardTitle = document.getElementById("featureCardTitle");
+  const storyCardTitle = document.getElementById("storyCardTitle");
+  const featureCreateBtn = document.getElementById("featureCreateBtn");
+  const featureSaveBtn = document.getElementById("featureSaveBtn");
+  const featureCsvInput = document.getElementById("featureCsvInput");
+  const storyCreateBtn = document.getElementById("storyCreateBtn");
+  const storySaveBtn = document.getElementById("storySaveBtn");
+  const storyFeatureSelect = document.getElementById("storyFeatureSelect");
+  const storySize = document.getElementById("storySize");
+  const storyDays = document.getElementById("storyDays");
+  const storyCsvInput = document.getElementById("storyCsvInput");
+
+  let currentProject = null;
+  let featuresCache = [];
+
+  function setBacklogActionsEnabled(enabled) {
+    backlogSaveBtn.disabled = !enabled;
+    backlogDeleteBtn.disabled = !enabled;
+    featureCreateBtn.disabled = !enabled;
+    storyCreateBtn.disabled = !enabled;
+  }
+
+  function updateBacklogTitles() {
+    if (!featureCardTitle || !storyCardTitle) return;
+    if (currentProject) {
+      featureCardTitle.textContent = `${currentProject.name} Feature IDs`;
+      storyCardTitle.textContent = `${currentProject.name} User Stories`;
+    } else {
+      featureCardTitle.textContent = "Feature IDs";
+      storyCardTitle.textContent = "User Stories";
+    }
+  }
+
+  async function loadBacklogProjects() {
+    const projects = await fetchJson("/api/backlog/project/list");
+    backlogProjectSelect.innerHTML = "<option value=\"\">Select project</option>";
+    projects.forEach((project) => {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      backlogProjectSelect.appendChild(option);
+    });
+  }
+
+  async function loadFeatures() {
+    if (!currentProject) return;
+    const features = await fetchJson(`/api/backlog/feature/list?project_id=${currentProject.id}`);
+    featuresCache = features;
+    const body = document.querySelector("#featureTable tbody");
+    body.innerHTML = "";
+    features.forEach((feature) => {
+      const row = document.createElement("tr");
+      row.dataset.featureId = feature.id;
+      row.innerHTML = `
+        <td>${feature.feature_key}</td>
+        <td>${feature.description}</td>
+        <td>${feature.days}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary feature-edit">Edit</button>
+          <button class="btn btn-sm btn-outline-danger feature-delete">Delete</button>
+        </td>
+      `;
+      body.appendChild(row);
+    });
+
+    body.querySelectorAll(".feature-edit").forEach((btn) => {
+      btn.addEventListener("click", onEditFeature);
+    });
+    body.querySelectorAll(".feature-delete").forEach((btn) => {
+      btn.addEventListener("click", onDeleteFeature);
+    });
+
+    storyFeatureSelect.innerHTML = "";
+    features.forEach((feature) => {
+      const option = document.createElement("option");
+      option.value = feature.id;
+      option.textContent = feature.feature_key;
+      storyFeatureSelect.appendChild(option);
+    });
+  }
+
+  async function loadStories() {
+    if (!currentProject) return;
+    const stories = await fetchJson(`/api/backlog/story/list?project_id=${currentProject.id}`);
+    const body = document.querySelector("#backlogStoryTable tbody");
+    body.innerHTML = "";
+    stories.forEach((story) => {
+      const feature = featuresCache.find((f) => f.id === story.feature_id);
+      const row = document.createElement("tr");
+      row.dataset.storyId = story.id;
+      row.innerHTML = `
+        <td>${feature ? feature.feature_key : ""}</td>
+        <td>${story.name}</td>
+        <td>${story.tshirt_size}</td>
+        <td>${story.story_points}</td>
+        <td>${story.days}</td>
+        <td><button class="btn btn-sm btn-outline-danger story-delete">Delete</button></td>
+      `;
+      body.appendChild(row);
+    });
+    body.querySelectorAll(".story-delete").forEach((btn) => {
+      btn.addEventListener("click", onDeleteStory);
+    });
+  }
+
+  async function refreshBacklog() {
+    await loadFeatures();
+    await loadStories();
+  }
+
+  async function loadSavedBacklogs() {
+    if (!backlogListBody) return;
+    backlogListBody.innerHTML = "";
+    const items = await fetchJson("/api/backlog/saved/list");
+    items.forEach((item) => {
+      const row = document.createElement("tr");
+      row.dataset.projectId = item.project_id;
+      row.innerHTML = `
+        <td>${item.project_name}</td>
+        <td>${item.saved_at ? item.saved_at.slice(0, 10) : ""}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary backlog-edit">Edit</button>
+          <button class="btn btn-sm btn-outline-danger backlog-delete">Delete</button>
+        </td>
+      `;
+      backlogListBody.appendChild(row);
+    });
+    backlogListBody.querySelectorAll(".backlog-edit").forEach((btn) => {
+      btn.addEventListener("click", onEditBacklog);
+    });
+    backlogListBody.querySelectorAll(".backlog-delete").forEach((btn) => {
+      btn.addEventListener("click", onDeleteBacklog);
+    });
+  }
+
+  function updateStoryDays() {
+    const size = storySize.value;
+    const sizeMap = { XS: 2, S: 3, M: 5 };
+    storyDays.value = sizeMap[size] || 0;
+  }
+
+  function setFeatureModal(mode, feature) {
+    const title = document.getElementById("featureModalTitle");
+    if (mode === "edit") {
+      title.textContent = "Edit FeatureID";
+      featureSaveBtn.textContent = "Update";
+      featureSaveBtn.dataset.mode = "edit";
+      featureSaveBtn.dataset.featureId = feature.id;
+      document.getElementById("featureKey").value = feature.feature_key;
+      document.getElementById("featureDesc").value = feature.description;
+    } else {
+      title.textContent = "Create FeatureID";
+      featureSaveBtn.textContent = "Create";
+      featureSaveBtn.dataset.mode = "create";
+      featureSaveBtn.dataset.featureId = "";
+      document.getElementById("featureKey").value = "";
+      document.getElementById("featureDesc").value = "";
+    }
+  }
+
+  async function onEditFeature(event) {
+    const row = event.target.closest("tr");
+    const featureId = Number(row.dataset.featureId);
+    const feature = featuresCache.find((f) => f.id === featureId);
+    if (!feature) return;
+    setFeatureModal("edit", feature);
+    const modal = new bootstrap.Modal(document.getElementById("featureModal"));
+    modal.show();
+  }
+
+  async function onDeleteFeature(event) {
+    const row = event.target.closest("tr");
+    const confirmDelete = window.confirm("Are you sure you want to delete?");
+    if (!confirmDelete) return;
+    await fetchJson("/api/backlog/feature/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(row.dataset.featureId) }),
+    });
+    await refreshBacklog();
+  }
+
+  async function onDeleteStory(event) {
+    const row = event.target.closest("tr");
+    const confirmDelete = window.confirm("Are you sure you want to delete?");
+    if (!confirmDelete) return;
+    await fetchJson("/api/backlog/story/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(row.dataset.storyId) }),
+    });
+    await refreshBacklog();
+  }
+
+  if (backlogSelectBtn) {
+    backlogSelectBtn.addEventListener("click", async () => {
+      await loadBacklogProjects();
+      const modal = new bootstrap.Modal(document.getElementById("backlogSelectModal"));
+      modal.show();
+    });
+  }
+
+  if (backlogProjectCreateBtn) {
+    backlogProjectCreateBtn.addEventListener("click", async () => {
+      const projectId = backlogProjectSelect.value;
+      if (!projectId) return;
+      const projectName = backlogProjectSelect.selectedOptions[0]?.textContent || "";
+      currentProject = { id: Number(projectId), name: projectName };
+      backlogInfo.textContent = `Backlog for ${projectName}`;
+      setBacklogActionsEnabled(true);
+      updateBacklogTitles();
+      await fetchJson("/api/backlog/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: currentProject.id }),
+      });
+      await refreshBacklog();
+      await loadSavedBacklogs();
+      const modalEl = document.getElementById("backlogSelectModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    });
+  }
+
+  async function onEditBacklog(event) {
+    const row = event.target.closest("tr");
+    const projectId = Number(row.dataset.projectId);
+    const projectName = row.children[0]?.textContent || "";
+    currentProject = { id: projectId, name: projectName };
+    backlogInfo.textContent = `Backlog for ${projectName}`;
+    setBacklogActionsEnabled(true);
+    updateBacklogTitles();
+    await refreshBacklog();
+  }
+
+  async function onDeleteBacklog(event) {
+    const row = event.target.closest("tr");
+    const confirmDelete = window.confirm("Are you sure you want to delete?");
+    if (!confirmDelete) return;
+    await fetchJson("/api/backlog/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: Number(row.dataset.projectId) }),
+    });
+    if (currentProject && currentProject.id === Number(row.dataset.projectId)) {
+      currentProject = null;
+      backlogInfo.textContent = "Select a project to start.";
+      setBacklogActionsEnabled(false);
+      updateBacklogTitles();
+      updateBacklogTitles();
+      const featureBody = document.querySelector("#featureTable tbody");
+      const storyBody = document.querySelector("#backlogStoryTable tbody");
+      if (featureBody) featureBody.innerHTML = "";
+      if (storyBody) storyBody.innerHTML = "";
+    }
+    await loadSavedBacklogs();
+  }
+
+  if (featureCreateBtn) {
+    featureCreateBtn.addEventListener("click", () => {
+      setFeatureModal("create");
+      const modal = new bootstrap.Modal(document.getElementById("featureModal"));
+      modal.show();
+    });
+  }
+
+  if (featureSaveBtn) {
+    featureSaveBtn.addEventListener("click", async () => {
+      if (!currentProject) return;
+      const featureKey = document.getElementById("featureKey").value.trim();
+      const description = document.getElementById("featureDesc").value.trim();
+      if (!featureKey || !description) return;
+      const mode = featureSaveBtn.dataset.mode || "create";
+      const payload = {
+        project_id: currentProject.id,
+        feature_key: featureKey,
+        description,
+      };
+      let endpoint = "/api/backlog/feature/create";
+      if (mode === "edit") {
+        endpoint = "/api/backlog/feature/update";
+        payload.id = Number(featureSaveBtn.dataset.featureId);
+      }
+      await fetchJson(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await refreshBacklog();
+      const modalEl = document.getElementById("featureModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    });
+  }
+
+  if (featureCsvInput) {
+    featureCsvInput.addEventListener("change", async () => {
+      if (!currentProject || !featureCsvInput.files.length) return;
+      const formData = new FormData();
+      formData.append("project_id", currentProject.id);
+      formData.append("file", featureCsvInput.files[0]);
+      await fetch("/api/backlog/feature/import", {
+        method: "POST",
+        body: formData,
+      });
+      featureCsvInput.value = "";
+      await refreshBacklog();
+    });
+  }
+
+  if (backlogSaveBtn) {
+    backlogSaveBtn.addEventListener("click", async () => {
+      if (!currentProject) return;
+      await fetchJson("/api/backlog/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: currentProject.id }),
+      });
+      await loadSavedBacklogs();
+    });
+  }
+
+  if (backlogDeleteBtn) {
+    backlogDeleteBtn.addEventListener("click", async () => {
+      if (!currentProject) return;
+      const confirmDelete = window.confirm("Are you sure you want to delete?");
+      if (!confirmDelete) return;
+      await fetchJson("/api/backlog/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: currentProject.id }),
+      });
+      currentProject = null;
+      backlogInfo.textContent = "Select a project to start.";
+      setBacklogActionsEnabled(false);
+      const featureBody = document.querySelector("#featureTable tbody");
+      const storyBody = document.querySelector("#backlogStoryTable tbody");
+      if (featureBody) featureBody.innerHTML = "";
+      if (storyBody) storyBody.innerHTML = "";
+      await loadSavedBacklogs();
+    });
+  }
+
+  if (storyCreateBtn) {
+    storyCreateBtn.addEventListener("click", () => {
+      updateStoryDays();
+      const modal = new bootstrap.Modal(document.getElementById("backlogStoryModal"));
+      modal.show();
+    });
+  }
+
+  if (storyCsvInput) {
+    storyCsvInput.addEventListener("change", async () => {
+      if (!currentProject || !storyCsvInput.files.length) return;
+      const formData = new FormData();
+      formData.append("project_id", currentProject.id);
+      formData.append("file", storyCsvInput.files[0]);
+      await fetch("/api/backlog/story/import", {
+        method: "POST",
+        body: formData,
+      });
+      storyCsvInput.value = "";
+      await refreshBacklog();
+    });
+  }
+
+  if (storySize) {
+    storySize.addEventListener("change", updateStoryDays);
+  }
+
+  if (storySaveBtn) {
+    storySaveBtn.addEventListener("click", async () => {
+      if (!currentProject) return;
+      const payload = {
+        feature_id: Number(storyFeatureSelect.value),
+        name: document.getElementById("storyTitle").value.trim(),
+        tshirt_size: storySize.value,
+      };
+      if (!payload.feature_id || !payload.name) return;
+      await fetchJson("/api/backlog/story/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      document.getElementById("storyTitle").value = "";
+      await refreshBacklog();
+      const modalEl = document.getElementById("backlogStoryModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    });
+  }
+
+  setBacklogActionsEnabled(false);
+  updateBacklogTitles();
+  await loadSavedBacklogs();
+}

@@ -80,3 +80,42 @@ class SprintCapacity(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey("people.id"), nullable=False)
     leaves = db.Column(db.Integer, default=0)
     allocation = db.Column(db.Integer, default=100)
+
+
+class BacklogFeature(db.Model):
+    __bind_key__ = "backlog"
+    __tablename__ = "backlog_features"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, nullable=False)
+    project_name = db.Column(db.String(120), nullable=False)
+    feature_key = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(500), nullable=False)
+    created_by = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class BacklogMeta(db.Model):
+    __bind_key__ = "backlog"
+    __tablename__ = "backlog_meta"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, nullable=False)
+    project_name = db.Column(db.String(120), nullable=False)
+    created_by = db.Column(db.Integer, nullable=False)
+    saved_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class BacklogStory(db.Model):
+    __bind_key__ = "backlog"
+    __tablename__ = "backlog_stories"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, nullable=False)
+    feature_id = db.Column(db.Integer, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    tshirt_size = db.Column(db.String(10), nullable=False)
+    story_points = db.Column(db.Integer, nullable=False)
+    days = db.Column(db.Integer, nullable=False)
+    created_by = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
