@@ -9,6 +9,7 @@ async function fetchJson(url, options) {
 let currentSprint = null;
 let peopleCache = [];
 let projectsCache = [];
+let storiesCache = [];
 let isDirty = false;
 let isSaved = false;
 let isViewOnly = false;
@@ -26,7 +27,16 @@ function buildCapacityRow(person) {
     <td><input type="number" class="form-control form-control-sm leaves-input" value="0" min="0" /></td>
     <td class="available-days">-</td>
     <td><input type="number" class="form-control form-control-sm allocation-input" value="100" min="10" max="100" step="10" /></td>
-    <td class="total-capacity">-</td>
+    <td class="total-capacity">
+      <div class="capacity-cell">
+        <div class="capacity-value">-</div>
+        <div class="util-bar">
+          <div class="util-fill"></div>
+          <div class="util-marker"></div>
+        </div>
+        <div class="util-label">0%</div>
+      </div>
+    </td>
     <td><button class="btn btn-sm btn-outline-danger delete-person">Delete</button></td>
   `;
   return row;
@@ -96,8 +106,12 @@ async function updateCapacity() {
     const row = document.querySelector(`#capacityTable tbody tr[data-person-id='${entry.person_id}']`);
     if (!row) return;
     row.querySelector(".available-days").textContent = entry.available_days;
-    row.querySelector(".total-capacity").textContent = entry.total_capacity;
+    const totalCapacity = Number(entry.total_capacity || 0);
+    row.dataset.totalCapacity = totalCapacity;
+    row.querySelector(".capacity-value").textContent = totalCapacity.toFixed(2);
   });
+
+  updateUtilizationBars();
 }
 
 async function loadStories() {
@@ -109,8 +123,8 @@ async function loadStories() {
     return;
   }
 
-  const stories = await fetchJson("/api/userstory/list");
-  stories.forEach((story) => {
+  storiesCache = await fetchJson("/api/userstory/list");
+  storiesCache.forEach((story) => {
     const row = document.createElement("tr");
     row.dataset.storyId = story.id;
     row.innerHTML = `
@@ -130,6 +144,39 @@ async function loadStories() {
 
   tableBody.querySelectorAll(".delete-story").forEach((button) => {
     button.addEventListener("click", onDeleteStory);
+  });
+
+  updateUtilizationBars();
+}
+
+function getAssignedPointsByPerson() {
+  const pointsByPerson = {};
+  document.querySelectorAll("#storyTable tbody tr").forEach((row) => {
+    const points = Number(row.children[1]?.textContent || 0);
+    const personId = Number(row.querySelector(".person-select")?.value || 0);
+    if (!personId) return;
+    pointsByPerson[personId] = (pointsByPerson[personId] || 0) + points;
+  });
+  return pointsByPerson;
+}
+
+function updateUtilizationBars() {
+  if (!currentSprint) return;
+  const assignedPoints = getAssignedPointsByPerson();
+  document.querySelectorAll("#capacityTable tbody tr").forEach((row) => {
+    const personId = Number(row.dataset.personId);
+    const totalCapacity = Number(row.dataset.totalCapacity || 0);
+    const usedPoints = Number(assignedPoints[personId] || 0);
+    const percent = totalCapacity > 0 ? (usedPoints / totalCapacity) * 100 : 0;
+    const clamped = Math.min(percent, 100);
+    const fill = row.querySelector(".util-fill");
+    const label = row.querySelector(".util-label");
+    if (!fill || !label) return;
+    fill.style.width = `${clamped}%`;
+    const isOver = percent > 100;
+    fill.classList.toggle("util-over", isOver);
+    label.textContent = `${percent.toFixed(0)}%`;
+    label.classList.toggle("util-over", isOver);
   });
 }
 
@@ -163,6 +210,7 @@ async function updateStoryRow(event) {
     body: JSON.stringify(payload),
   });
   markDirty();
+  updateUtilizationBars();
 }
 
 async function onDeleteStory(event) {
@@ -174,6 +222,7 @@ async function onDeleteStory(event) {
   });
   await loadStories();
   markDirty();
+  updateUtilizationBars();
 }
 
 async function onDeletePerson(event) {
@@ -401,6 +450,7 @@ async function initSprintPlan() {
       await renderCapacityTable();
       await loadStories();
       markDirty();
+      updateUtilizationBars();
     });
   }
 

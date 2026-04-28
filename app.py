@@ -334,7 +334,7 @@ def api_capacity_calc():
         leaves = int(entry.get("leaves", 0))
         allocation = int(entry.get("allocation", 100))
         available = max(total_days - leaves, 0)
-        total_capacity = int(round(available * (allocation / 100.0)))
+        total_capacity = round(available * (allocation / 100.0), 2)
         result.append({
             "person_id": entry.get("person_id"),
             "available_days": available,

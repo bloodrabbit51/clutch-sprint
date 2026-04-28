@@ -21,3 +21,53 @@ body {
 .table tbody tr td {
   vertical-align: middle;
 }
+
+.capacity-cell {
+  min-width: 140px;
+}
+
+.capacity-value {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.util-bar {
+  position: relative;
+  height: 8px;
+  background: #e6e8ef;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.util-fill {
+  height: 100%;
+  width: 0;
+  background: #1f9d55;
+  transition: width 0.2s ease;
+}
+
+.util-fill.util-over {
+  background: #dc3545;
+}
+
+.util-marker {
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: #1f2937;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+.util-label {
+  font-size: 0.75rem;
+  color: #1f9d55;
+  margin-top: 2px;
+}
+
+.util-label.util-over {
+  color: #dc3545;
+}
