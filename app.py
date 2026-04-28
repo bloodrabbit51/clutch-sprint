@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import csv
 from io import TextIOWrapper
-from flask import Flask, render_template, request, redirect, session, jsonify, url_for
+from flask import Flask, render_template, request, redirect, session, jsonify, url_for, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import (
     db,
@@ -132,6 +132,18 @@ def project_plan():
 @login_required
 def previous_sprints():
     return render_template("previous_sprints.html")
+
+
+@app.route("/template")
+@login_required
+def template_page():
+    return render_template("template.html")
+
+
+@app.route("/templates/<path:filename>")
+@login_required
+def download_template(filename):
+    return send_from_directory("static/templates", filename, as_attachment=True)
 
 
 @app.get("/api/people/list")
@@ -345,15 +357,23 @@ def api_backlog_feature_import():
     reader = csv.reader(wrapper)
     first = True
     created = 0
+    errors = []
+    row_index = 0
     for row in reader:
+        row_index += 1
         if first:
             first = False
             continue
         if len(row) < 2:
+            errors.append(f"Row {row_index}: Expected 2 columns")
             continue
         feature_key = (row[0] or "").strip()
         description = (row[1] or "").strip()
-        if not feature_key or not description:
+        if not feature_key:
+            errors.append(f"Row {row_index}: Missing Feature ID")
+            continue
+        if not description:
+            errors.append(f"Row {row_index}: Missing Description")
             continue
         db.session.add(
             BacklogFeature(
@@ -366,7 +386,7 @@ def api_backlog_feature_import():
         )
         created += 1
     db.session.commit()
-    return jsonify({"created": created})
+    return jsonify({"created": created, "errors": errors})
 
 
 @app.get("/api/backlog/story/list")
@@ -441,20 +461,32 @@ def api_backlog_story_import():
     reader = csv.reader(wrapper)
     first = True
     created = 0
+    errors = []
     size_map = {"XS": 2, "S": 3, "M": 5}
+    row_index = 0
     for row in reader:
+        row_index += 1
         if first:
             first = False
             continue
         if len(row) < 3:
+            errors.append(f"Row {row_index}: Expected 3 columns")
             continue
         feature_key = (row[0] or "").strip()
         name = (row[1] or "").strip()
         tshirt_size = (row[2] or "").strip().upper()
-        if not feature_key or not name or tshirt_size not in size_map:
+        if not feature_key:
+            errors.append(f"Row {row_index}: Missing Feature ID")
+            continue
+        if not name:
+            errors.append(f"Row {row_index}: Missing User Story")
+            continue
+        if tshirt_size not in size_map:
+            errors.append(f"Row {row_index}: Invalid Size '{tshirt_size}'")
             continue
         feature = feature_map.get(feature_key)
         if not feature:
+            errors.append(f"Row {row_index}: Feature ID '{feature_key}' not found")
             continue
         points = size_map[tshirt_size]
         db.session.add(
@@ -470,7 +502,7 @@ def api_backlog_story_import():
         )
         created += 1
     db.session.commit()
-    return jsonify({"created": created})
+    return jsonify({"created": created, "errors": errors})
 
 
 @app.post("/api/backlog/story/delete")

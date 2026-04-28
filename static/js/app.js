@@ -694,6 +694,8 @@ async function initProjectPlan() {
   const storySize = document.getElementById("storySize");
   const storyDays = document.getElementById("storyDays");
   const storyCsvInput = document.getElementById("storyCsvInput");
+  const backlogError = document.getElementById("backlogError");
+  const backlogErrorList = document.getElementById("backlogErrorList");
 
   let currentProject = null;
   let featuresCache = [];
@@ -791,6 +793,21 @@ async function initProjectPlan() {
   async function refreshBacklog() {
     await loadFeatures();
     await loadStories();
+  }
+
+  function showBacklogErrors(errors) {
+    if (!backlogError || !backlogErrorList) return;
+    backlogErrorList.innerHTML = "";
+    if (!errors || errors.length === 0) {
+      backlogError.classList.add("d-none");
+      return;
+    }
+    errors.forEach((message) => {
+      const li = document.createElement("li");
+      li.textContent = message;
+      backlogErrorList.appendChild(li);
+    });
+    backlogError.classList.remove("d-none");
   }
 
   async function loadSavedBacklogs() {
@@ -984,10 +1001,16 @@ async function initProjectPlan() {
       const formData = new FormData();
       formData.append("project_id", currentProject.id);
       formData.append("file", featureCsvInput.files[0]);
-      await fetch("/api/backlog/feature/import", {
+      const res = await fetch("/api/backlog/feature/import", {
         method: "POST",
         body: formData,
       });
+      if (res.ok) {
+        const data = await res.json();
+        showBacklogErrors(data.errors || []);
+      } else {
+        showBacklogErrors(["Import failed. Check the CSV and try again."]);
+      }
       featureCsvInput.value = "";
       await refreshBacklog();
     });
@@ -1040,10 +1063,16 @@ async function initProjectPlan() {
       const formData = new FormData();
       formData.append("project_id", currentProject.id);
       formData.append("file", storyCsvInput.files[0]);
-      await fetch("/api/backlog/story/import", {
+      const res = await fetch("/api/backlog/story/import", {
         method: "POST",
         body: formData,
       });
+      if (res.ok) {
+        const data = await res.json();
+        showBacklogErrors(data.errors || []);
+      } else {
+        showBacklogErrors(["Import failed. Check the CSV and try again."]);
+      }
       storyCsvInput.value = "";
       await refreshBacklog();
     });
