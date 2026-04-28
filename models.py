@@ -83,7 +83,6 @@ class SprintCapacity(db.Model):
 
 
 class BacklogFeature(db.Model):
-    __bind_key__ = "backlog"
     __tablename__ = "backlog_features"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -96,7 +95,6 @@ class BacklogFeature(db.Model):
 
 
 class BacklogMeta(db.Model):
-    __bind_key__ = "backlog"
     __tablename__ = "backlog_meta"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -107,7 +105,6 @@ class BacklogMeta(db.Model):
 
 
 class BacklogStory(db.Model):
-    __bind_key__ = "backlog"
     __tablename__ = "backlog_stories"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -117,5 +114,46 @@ class BacklogStory(db.Model):
     tshirt_size = db.Column(db.String(10), nullable=False)
     story_points = db.Column(db.Integer, nullable=False)
     days = db.Column(db.Integer, nullable=False)
+    created_by = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PIPlan(db.Model):
+    __bind_key__ = "backlog"
+    __tablename__ = "pi_plans"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, nullable=False)
+    project_name = db.Column(db.String(120), nullable=False)
+    quarter = db.Column(db.String(2), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    is_saved = db.Column(db.Boolean, default=False)
+    saved_at = db.Column(db.DateTime)
+    created_by = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PITeamMember(db.Model):
+    __bind_key__ = "backlog"
+    __tablename__ = "pi_team_members"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pi_plan_id = db.Column(db.Integer, db.ForeignKey("pi_plans.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(50), nullable=False)
+    allocation = db.Column(db.Integer, nullable=False)
+    sprint1 = db.Column(db.Float, nullable=False)
+    sprint2 = db.Column(db.Float, nullable=False)
+    sprint3 = db.Column(db.Float, nullable=False)
+    sprint4 = db.Column(db.Float, nullable=False)
+    sprint5 = db.Column(db.Float, nullable=False)
+    sprint6 = db.Column(db.Float, nullable=False)
+    avg_productivity = db.Column(db.Float, nullable=False)
+    technologies = db.Column(db.Text)
+    safety_certified = db.Column(db.Boolean, default=False)
+    training_done = db.Column(db.Boolean, default=False)
+    months_worked = db.Column(db.Integer)
+    delivered_us = db.Column(db.Boolean, default=False)
     created_by = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

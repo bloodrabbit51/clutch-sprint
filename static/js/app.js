@@ -673,7 +673,406 @@ document.addEventListener("DOMContentLoaded", () => {
   if (document.getElementById("featureTable")) {
     initProjectPlan();
   }
+  if (document.getElementById("piPlanHeading")) {
+    initPiPlan();
+  }
 });
+
+async function initPiPlan() {
+  const piPlanHeading = document.getElementById("piPlanHeading");
+  const piPlanCreateBtn = document.getElementById("piPlanCreateBtn");
+  const piPlanSaveBtn = document.getElementById("piPlanSaveBtn");
+  const piPlanSaveBtnTop = document.getElementById("piPlanSaveBtnTop");
+  const piPlanDeleteBtn = document.getElementById("piPlanDeleteBtn");
+  const piPlanListBody = document.querySelector("#piPlanListTable tbody");
+  const piProjectSelect = document.getElementById("piProjectSelect");
+  const piQuarterSelect = document.getElementById("piQuarterSelect");
+  const piYearSelect = document.getElementById("piYearSelect");
+  const piPlanName = document.getElementById("piPlanName");
+  const teamAddBtn = document.getElementById("teamAddBtn");
+  const teamTableBody = document.querySelector("#teamTable tbody");
+  const teamSaveBtn = document.getElementById("teamSaveBtn");
+  const teamModalTitle = document.getElementById("teamModalTitle");
+  const sameProductivityBtn = document.getElementById("sameProductivityBtn");
+  const avgProd = document.getElementById("avgProd");
+  const techList = document.getElementById("techList");
+  const addTechBtn = document.getElementById("addTechBtn");
+
+  let currentPiPlan = null;
+  let techItems = [];
+
+  function formatPiName(projectName, year, quarter) {
+    if (!projectName || !year || !quarter) return "";
+    const safeProject = projectName.replace(/\s+/g, "");
+    const yy = String(year).slice(-2);
+    return `${safeProject}_CY${yy}${quarter}`;
+  }
+
+  function updatePiName() {
+    const projectName = piProjectSelect?.selectedOptions?.[0]?.textContent || "";
+    const year = piYearSelect?.value || "";
+    const quarter = piQuarterSelect?.value || "";
+    if (piPlanName) {
+      piPlanName.value = formatPiName(projectName, year, quarter);
+    }
+  }
+
+  async function loadProjects() {
+    const projects = await fetchJson("/api/project/list");
+    piProjectSelect.innerHTML = "<option value=\"\">Select project</option>";
+    projects.forEach((project) => {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      piProjectSelect.appendChild(option);
+    });
+  }
+
+  function populateYears() {
+    piYearSelect.innerHTML = "<option value=\"\">Select year</option>";
+    for (let year = 2024; year <= 2030; year += 1) {
+      const option = document.createElement("option");
+      option.value = String(year);
+      option.textContent = String(year);
+      piYearSelect.appendChild(option);
+    }
+  }
+
+  function setTeamButtonState(enabled) {
+    teamAddBtn.disabled = !enabled;
+    if (piPlanSaveBtnTop) piPlanSaveBtnTop.disabled = !enabled;
+    if (piPlanDeleteBtn) piPlanDeleteBtn.disabled = !enabled;
+  }
+
+  function getProductivityValues() {
+    const values = [1, 2, 3, 4, 5, 6].map((index) => {
+      const value = Number(document.getElementById(`prod${index}`).value || 0);
+      return value;
+    });
+    return values;
+  }
+
+  function updateAverageProductivity() {
+    const values = getProductivityValues();
+    const avg = values.reduce((sum, val) => sum + val, 0) / 6;
+    avgProd.value = avg.toFixed(2);
+  }
+
+  function renderTechList() {
+    techList.innerHTML = "";
+    techItems.forEach((item, index) => {
+      const badge = document.createElement("span");
+      badge.className = "badge text-bg-light border me-2 mb-2";
+      badge.textContent = `${item.name} (${item.experience})`;
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-sm btn-link text-danger ms-1 p-0";
+      removeBtn.textContent = "x";
+      removeBtn.addEventListener("click", () => {
+        techItems.splice(index, 1);
+        renderTechList();
+      });
+      badge.appendChild(removeBtn);
+      techList.appendChild(badge);
+    });
+  }
+
+  function resetTeamModal() {
+    document.getElementById("teamName").value = "";
+    document.getElementById("teamRole").value = "";
+    document.getElementById("teamAllocation").value = "";
+    [1, 2, 3, 4, 5, 6].forEach((index) => {
+      document.getElementById(`prod${index}`).value = "";
+    });
+    avgProd.value = "";
+    document.getElementById("safetyCertified").value = "false";
+    document.getElementById("trainingDone").value = "false";
+    document.getElementById("monthsWorked").value = "";
+    document.getElementById("deliveredUs").value = "false";
+    document.getElementById("techName").value = "";
+    document.getElementById("techExp").value = "";
+    techItems = [];
+    renderTechList();
+  }
+
+  function setTeamModal(mode, member) {
+    teamModalTitle.textContent = mode === "edit" ? "Edit Team Member" : "Add Team Member";
+    teamSaveBtn.dataset.mode = mode;
+    teamSaveBtn.dataset.memberId = member ? member.id : "";
+    if (mode === "edit" && member) {
+      document.getElementById("teamName").value = member.name;
+      document.getElementById("teamRole").value = member.role;
+      document.getElementById("teamAllocation").value = member.allocation;
+      document.getElementById("prod1").value = member.sprint1;
+      document.getElementById("prod2").value = member.sprint2;
+      document.getElementById("prod3").value = member.sprint3;
+      document.getElementById("prod4").value = member.sprint4;
+      document.getElementById("prod5").value = member.sprint5;
+      document.getElementById("prod6").value = member.sprint6;
+      updateAverageProductivity();
+      document.getElementById("safetyCertified").value = String(member.safety_certified);
+      document.getElementById("trainingDone").value = String(member.training_done);
+      document.getElementById("monthsWorked").value = member.months_worked || "";
+      document.getElementById("deliveredUs").value = String(member.delivered_us);
+      techItems = member.technologies || [];
+      renderTechList();
+    } else {
+      resetTeamModal();
+    }
+  }
+
+  function buildOptionalSummary(member) {
+    const parts = [];
+    if (member.technologies && member.technologies.length) {
+      const techLabel = member.technologies
+        .map((t) => `${t.name} (${t.experience})`)
+        .join(", ");
+      parts.push(`Tech: ${techLabel}`);
+    }
+    parts.push(`Safety: ${member.safety_certified ? "Yes" : "No"}`);
+    parts.push(`Training: ${member.training_done ? "Yes" : "No"}`);
+    if (member.months_worked !== null && member.months_worked !== undefined && member.months_worked !== "") {
+      parts.push(`Months: ${member.months_worked}`);
+    }
+    parts.push(`Delivered: ${member.delivered_us ? "Yes" : "No"}`);
+    return parts.join(" | ");
+  }
+
+  async function loadTeamMembers() {
+    if (!currentPiPlan) return;
+    const members = await fetchJson(`/api/pi/team/list?pi_plan_id=${currentPiPlan.id}`);
+    teamTableBody.innerHTML = "";
+    members.forEach((member) => {
+      const row = document.createElement("tr");
+      row.dataset.memberId = member.id;
+      row.innerHTML = `
+        <td>${member.name}</td>
+        <td>${member.role}</td>
+        <td>${member.allocation}%</td>
+        <td>${Number(member.avg_productivity).toFixed(2)}</td>
+        <td>${buildOptionalSummary(member)}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary team-edit">Edit</button>
+          <button class="btn btn-sm btn-outline-danger team-delete">Delete</button>
+        </td>
+      `;
+      row.dataset.member = JSON.stringify(member);
+      teamTableBody.appendChild(row);
+    });
+
+    teamTableBody.querySelectorAll(".team-edit").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        const row = event.target.closest("tr");
+        const member = JSON.parse(row.dataset.member || "{}");
+        setTeamModal("edit", member);
+        const modal = new bootstrap.Modal(document.getElementById("teamModal"));
+        modal.show();
+      });
+    });
+
+    teamTableBody.querySelectorAll(".team-delete").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        const confirmDelete = window.confirm("Are you sure you want to delete?");
+        if (!confirmDelete) return;
+        const row = event.target.closest("tr");
+        await fetchJson("/api/pi/team/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: Number(row.dataset.memberId) }),
+        });
+        await loadTeamMembers();
+      });
+    });
+  }
+
+  async function loadPiPlanList() {
+    if (!piPlanListBody) return;
+    piPlanListBody.innerHTML = "";
+    const plans = await fetchJson("/api/pi/plan/list");
+    plans.forEach((plan) => {
+      const row = document.createElement("tr");
+      row.dataset.planId = plan.id;
+      row.innerHTML = `
+        <td>${plan.name}</td>
+        <td>${plan.project_name}</td>
+        <td>${plan.saved_at ? plan.saved_at.slice(0, 10) : ""}</td>
+        <td><button class="btn btn-sm btn-outline-primary pi-plan-open">Open</button></td>
+      `;
+      piPlanListBody.appendChild(row);
+    });
+    piPlanListBody.querySelectorAll(".pi-plan-open").forEach((btn) => {
+      btn.addEventListener("click", onOpenPlan);
+    });
+  }
+
+  async function onOpenPlan(event) {
+    const row = event.target.closest("tr");
+    const planId = Number(row.dataset.planId);
+    const plan = await fetchJson(`/api/pi/plan/get?id=${planId}`);
+    if (!plan) return;
+    currentPiPlan = plan;
+    piPlanHeading.textContent = plan.name;
+    setTeamButtonState(true);
+    await loadTeamMembers();
+  }
+
+  if (piPlanCreateBtn) {
+    piPlanCreateBtn.addEventListener("click", async () => {
+      await loadProjects();
+      populateYears();
+      updatePiName();
+      const modal = new bootstrap.Modal(document.getElementById("piPlanModal"));
+      modal.show();
+    });
+  }
+
+  if (piProjectSelect) {
+    piProjectSelect.addEventListener("change", updatePiName);
+  }
+  if (piQuarterSelect) {
+    piQuarterSelect.addEventListener("change", updatePiName);
+  }
+  if (piYearSelect) {
+    piYearSelect.addEventListener("change", updatePiName);
+  }
+
+  if (piPlanSaveBtn) {
+    piPlanSaveBtn.addEventListener("click", async () => {
+      const payload = {
+        project_id: piProjectSelect.value,
+        quarter: piQuarterSelect.value,
+        year: piYearSelect.value,
+      };
+      if (!payload.project_id || !payload.quarter || !payload.year) {
+        alert("All fields are required.");
+        return;
+      }
+      currentPiPlan = await fetchJson("/api/pi/plan/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      piPlanHeading.textContent = currentPiPlan.name;
+      setTeamButtonState(true);
+      await loadTeamMembers();
+      await loadPiPlanList();
+      const modalEl = document.getElementById("piPlanModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    });
+  }
+
+  if (piPlanSaveBtnTop) {
+    piPlanSaveBtnTop.addEventListener("click", async () => {
+      if (!currentPiPlan) return;
+      await fetchJson("/api/pi/plan/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentPiPlan.id }),
+      });
+      await loadPiPlanList();
+    });
+  }
+
+  if (piPlanDeleteBtn) {
+    piPlanDeleteBtn.addEventListener("click", async () => {
+      if (!currentPiPlan) return;
+      const confirmDelete = window.confirm("Are you sure you want to delete?");
+      if (!confirmDelete) return;
+      await fetchJson("/api/pi/plan/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentPiPlan.id }),
+      });
+      currentPiPlan = null;
+      piPlanHeading.textContent = "PI Plan";
+      setTeamButtonState(false);
+      if (teamTableBody) teamTableBody.innerHTML = "";
+      await loadPiPlanList();
+    });
+  }
+
+  if (teamAddBtn) {
+    teamAddBtn.addEventListener("click", () => {
+      setTeamModal("create");
+      const modal = new bootstrap.Modal(document.getElementById("teamModal"));
+      modal.show();
+    });
+  }
+
+  if (sameProductivityBtn) {
+    sameProductivityBtn.addEventListener("click", () => {
+      const value = document.getElementById("prod1").value;
+      [2, 3, 4, 5, 6].forEach((index) => {
+        document.getElementById(`prod${index}`).value = value;
+      });
+      updateAverageProductivity();
+    });
+  }
+
+  [1, 2, 3, 4, 5, 6].forEach((index) => {
+    document.getElementById(`prod${index}`).addEventListener("input", updateAverageProductivity);
+  });
+
+  if (addTechBtn) {
+    addTechBtn.addEventListener("click", () => {
+      const name = document.getElementById("techName").value.trim();
+      const experience = document.getElementById("techExp").value.trim();
+      if (!name || !experience) return;
+      techItems.push({ name, experience });
+      document.getElementById("techName").value = "";
+      document.getElementById("techExp").value = "";
+      renderTechList();
+    });
+  }
+
+  if (teamSaveBtn) {
+    teamSaveBtn.addEventListener("click", async () => {
+      if (!currentPiPlan) return;
+      const payload = {
+        pi_plan_id: currentPiPlan.id,
+        name: document.getElementById("teamName").value.trim(),
+        role: document.getElementById("teamRole").value,
+        allocation: document.getElementById("teamAllocation").value,
+        sprints: getProductivityValues(),
+        technologies: techItems,
+        safety_certified: document.getElementById("safetyCertified").value === "true",
+        training_done: document.getElementById("trainingDone").value === "true",
+        months_worked: document.getElementById("monthsWorked").value || null,
+        delivered_us: document.getElementById("deliveredUs").value === "true",
+      };
+      if (!payload.name || !payload.role || !payload.allocation) {
+        alert("All mandatory fields are required.");
+        return;
+      }
+      const endpoint = teamSaveBtn.dataset.mode === "edit" ? "/api/pi/team/update" : "/api/pi/team/create";
+      if (teamSaveBtn.dataset.mode === "edit") {
+        payload.id = Number(teamSaveBtn.dataset.memberId);
+      }
+      await fetchJson(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const modalEl = document.getElementById("teamModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+      await loadTeamMembers();
+    });
+  }
+
+  const existing = await fetchJson("/api/pi/plan/current");
+  if (existing) {
+    currentPiPlan = existing;
+    piPlanHeading.textContent = existing.name;
+    setTeamButtonState(true);
+    await loadTeamMembers();
+  } else {
+    setTeamButtonState(false);
+  }
+
+  await loadPiPlanList();
+}
 
 async function initProjectPlan() {
   const backlogSelectBtn = document.getElementById("backlogSelectBtn");

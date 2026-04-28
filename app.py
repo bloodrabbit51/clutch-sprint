@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 import csv
 from io import TextIOWrapper
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for, send_from_directory
@@ -15,6 +16,8 @@ from models import (
     BacklogFeature,
     BacklogMeta,
     BacklogStory,
+    PIPlan,
+    PITeamMember,
 )
 
 
@@ -128,6 +131,12 @@ def project_plan():
     return render_template("project_plan.html")
 
 
+@app.route("/pi-plan")
+@login_required
+def pi_plan():
+    return render_template("pi_plan.html")
+
+
 @app.route("/previous-sprints")
 @login_required
 def previous_sprints():
@@ -144,6 +153,253 @@ def template_page():
 @login_required
 def download_template(filename):
     return send_from_directory("static/templates", filename, as_attachment=True)
+
+
+@app.post("/api/pi/plan/create")
+@login_required
+def api_pi_plan_create():
+    data = request.get_json(force=True)
+    project_id = data.get("project_id")
+    quarter = (data.get("quarter") or "").strip().upper()
+    year = data.get("year")
+    if not all([project_id, quarter, year]):
+        return jsonify({"error": "All fields are required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    if quarter not in ["Q1", "Q2", "Q3", "Q4"]:
+        return jsonify({"error": "Invalid quarter"}), 400
+    year_int = int(year)
+    name = format_pi_name(project.name, year_int, quarter)
+    plan = PIPlan(
+        project_id=project.id,
+        project_name=project.name,
+        quarter=quarter,
+        year=year_int,
+        name=name,
+        is_saved=False,
+        created_by=session["user_id"],
+    )
+    db.session.add(plan)
+    db.session.commit()
+    return jsonify({
+        "id": plan.id,
+        "name": plan.name,
+        "project_id": plan.project_id,
+        "project_name": plan.project_name,
+        "quarter": plan.quarter,
+        "year": plan.year,
+        "is_saved": plan.is_saved,
+    })
+
+
+@app.get("/api/pi/plan/current")
+@login_required
+def api_pi_plan_current():
+    plan = PIPlan.query.filter_by(created_by=session["user_id"]).order_by(PIPlan.created_at.desc()).first()
+    if not plan:
+        return jsonify(None)
+    return jsonify({
+        "id": plan.id,
+        "name": plan.name,
+        "project_id": plan.project_id,
+        "project_name": plan.project_name,
+        "quarter": plan.quarter,
+        "year": plan.year,
+        "is_saved": plan.is_saved,
+    })
+
+
+@app.get("/api/pi/plan/get")
+@login_required
+def api_pi_plan_get():
+    plan_id = request.args.get("id")
+    plan = PIPlan.query.get(int(plan_id)) if plan_id else None
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify(None)
+    return jsonify({
+        "id": plan.id,
+        "name": plan.name,
+        "project_id": plan.project_id,
+        "project_name": plan.project_name,
+        "quarter": plan.quarter,
+        "year": plan.year,
+        "is_saved": plan.is_saved,
+    })
+
+
+@app.post("/api/pi/plan/save")
+@login_required
+def api_pi_plan_save():
+    data = request.get_json(force=True)
+    plan = PIPlan.query.get(int(data.get("id")))
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify({"error": "Not found"}), 404
+    plan.is_saved = True
+    plan.saved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/pi/plan/delete")
+@login_required
+def api_pi_plan_delete():
+    data = request.get_json(force=True)
+    plan = PIPlan.query.get(int(data.get("id")))
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify({"error": "Not found"}), 404
+    PITeamMember.query.filter_by(pi_plan_id=plan.id).delete()
+    db.session.delete(plan)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.get("/api/pi/plan/list")
+@login_required
+def api_pi_plan_list():
+    plans = PIPlan.query.filter_by(created_by=session["user_id"], is_saved=True).order_by(PIPlan.saved_at.desc()).all()
+    return jsonify([
+        {
+            "id": plan.id,
+            "name": plan.name,
+            "project_name": plan.project_name,
+            "quarter": plan.quarter,
+            "year": plan.year,
+            "saved_at": plan.saved_at.isoformat() if plan.saved_at else None,
+        }
+        for plan in plans
+    ])
+
+
+@app.get("/api/pi/team/list")
+@login_required
+def api_pi_team_list():
+    plan_id = request.args.get("pi_plan_id")
+    if not plan_id:
+        return jsonify([])
+    plan = PIPlan.query.get(int(plan_id))
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify([])
+    members = PITeamMember.query.filter_by(pi_plan_id=plan.id).order_by(PITeamMember.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": m.id,
+            "name": m.name,
+            "role": m.role,
+            "allocation": m.allocation,
+            "sprint1": m.sprint1,
+            "sprint2": m.sprint2,
+            "sprint3": m.sprint3,
+            "sprint4": m.sprint4,
+            "sprint5": m.sprint5,
+            "sprint6": m.sprint6,
+            "avg_productivity": m.avg_productivity,
+            "technologies": json.loads(m.technologies) if m.technologies else [],
+            "safety_certified": m.safety_certified,
+            "training_done": m.training_done,
+            "months_worked": m.months_worked,
+            "delivered_us": m.delivered_us,
+        }
+        for m in members
+    ])
+
+
+@app.post("/api/pi/team/create")
+@login_required
+def api_pi_team_create():
+    data = request.get_json(force=True)
+    plan_id = data.get("pi_plan_id")
+    name = (data.get("name") or "").strip()
+    role = (data.get("role") or "").strip()
+    allocation = data.get("allocation")
+    sprints = data.get("sprints") or []
+    if not plan_id or not name or not role or allocation is None or len(sprints) != 6:
+        return jsonify({"error": "All fields are required"}), 400
+    plan = PIPlan.query.get(int(plan_id))
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid plan"}), 400
+    sprint_vals = [float(v) for v in sprints]
+    avg = sum(sprint_vals) / 6.0
+    member = PITeamMember(
+        pi_plan_id=plan.id,
+        name=name,
+        role=role,
+        allocation=int(allocation),
+        sprint1=sprint_vals[0],
+        sprint2=sprint_vals[1],
+        sprint3=sprint_vals[2],
+        sprint4=sprint_vals[3],
+        sprint5=sprint_vals[4],
+        sprint6=sprint_vals[5],
+        avg_productivity=avg,
+        technologies=json.dumps(data.get("technologies") or []),
+        safety_certified=bool(data.get("safety_certified")),
+        training_done=bool(data.get("training_done")),
+        months_worked=data.get("months_worked"),
+        delivered_us=bool(data.get("delivered_us")),
+        created_by=session["user_id"],
+    )
+    db.session.add(member)
+    db.session.commit()
+    return jsonify({"id": member.id})
+
+
+@app.post("/api/pi/team/update")
+@login_required
+def api_pi_team_update():
+    data = request.get_json(force=True)
+    member = PITeamMember.query.get(int(data.get("id")))
+    if not member:
+        return jsonify({"error": "Not found"}), 404
+    plan = PIPlan.query.get(member.pi_plan_id)
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    name = (data.get("name") or "").strip()
+    role = (data.get("role") or "").strip()
+    allocation = data.get("allocation")
+    sprints = data.get("sprints") or []
+    if not name or not role or allocation is None or len(sprints) != 6:
+        return jsonify({"error": "All fields are required"}), 400
+    sprint_vals = [float(v) for v in sprints]
+    avg = sum(sprint_vals) / 6.0
+    member.name = name
+    member.role = role
+    member.allocation = int(allocation)
+    member.sprint1 = sprint_vals[0]
+    member.sprint2 = sprint_vals[1]
+    member.sprint3 = sprint_vals[2]
+    member.sprint4 = sprint_vals[3]
+    member.sprint5 = sprint_vals[4]
+    member.sprint6 = sprint_vals[5]
+    member.avg_productivity = avg
+    member.technologies = json.dumps(data.get("technologies") or [])
+    member.safety_certified = bool(data.get("safety_certified"))
+    member.training_done = bool(data.get("training_done"))
+    member.months_worked = data.get("months_worked")
+    member.delivered_us = bool(data.get("delivered_us"))
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/pi/team/delete")
+@login_required
+def api_pi_team_delete():
+    data = request.get_json(force=True)
+    member = PITeamMember.query.get(int(data.get("id")))
+    if not member:
+        return jsonify({"error": "Not found"}), 404
+    plan = PIPlan.query.get(member.pi_plan_id)
+    if not plan or plan.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    db.session.delete(member)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+def format_pi_name(project_name, year, quarter):
+    safe_project = project_name.replace(" ", "")
+    yy = str(year)[-2:]
+    return f"{safe_project}_CY{yy}{quarter}"
 
 
 @app.get("/api/people/list")

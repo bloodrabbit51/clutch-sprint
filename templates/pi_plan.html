@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 id="piPlanHeading">PI Plan</h2>
+  <div class="d-flex gap-2">
+    <button class="btn btn-success" id="piPlanSaveBtnTop" disabled>Save</button>
+    <button class="btn btn-outline-danger" id="piPlanDeleteBtn" disabled>Delete</button>
+    <button class="btn btn-primary" id="piPlanCreateBtn">Create PI Plan</button>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Saved PI Plans</h5>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#piPlanListCollapse" aria-expanded="false">
+        Toggle
+      </button>
+    </div>
+    <div class="collapse mt-3" id="piPlanListCollapse">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle" id="piPlanListTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Project</th>
+              <th>Saved</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="card-title">Team</h5>
+      <button class="btn btn-outline-primary" id="teamAddBtn" disabled>Add Team Member</button>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle" id="teamTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Allocation %</th>
+            <th>Avg Productivity</th>
+            <th>Optional</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="piPlanModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create PI Plan</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Project</label>
+          <select class="form-select" id="piProjectSelect" required>
+            <option value="">Select project</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quarter</label>
+          <select class="form-select" id="piQuarterSelect" required>
+            <option value="">Select quarter</option>
+            <option value="Q1">Q1</option>
+            <option value="Q2">Q2</option>
+            <option value="Q3">Q3</option>
+            <option value="Q4">Q4</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Year</label>
+          <select class="form-select" id="piYearSelect" required>
+            <option value="">Select year</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input class="form-control" id="piPlanName" readonly />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="piPlanSaveBtn">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="teamModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="teamModalTitle">Add Team Member</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Name</label>
+            <input class="form-control" id="teamName" required />
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="teamRole" required>
+              <option value="">Select role</option>
+              <option value="Architect">Architect</option>
+              <option value="Developer">Developer</option>
+            </select>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Allocation %</label>
+            <input type="number" class="form-control" id="teamAllocation" min="1" max="100" required />
+          </div>
+        </div>
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Sprint Productivity (0-1)</h6>
+            <button class="btn btn-sm btn-outline-secondary" id="sameProductivityBtn" type="button">Same for all sprints</button>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 1</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod1" required />
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 2</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod2" required />
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 3</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod3" required />
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 4</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod4" required />
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 5</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod5" required />
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Sprint 6</label>
+              <input type="number" step="0.01" min="0" max="1" class="form-control" id="prod6" required />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Average Productivity</label>
+              <input class="form-control" id="avgProd" readonly />
+            </div>
+          </div>
+        </div>
+        <div class="border rounded p-3">
+          <h6>Optional</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Safety Certified</label>
+              <select class="form-select" id="safetyCertified">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Project Training Done</label>
+              <select class="form-select" id="trainingDone">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Months Worked in Project</label>
+              <input type="number" min="0" class="form-control" id="monthsWorked" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Delivered US/Code</label>
+              <select class="form-select" id="deliveredUs">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          </div>
+          <div class="border-top pt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">Technologies</label>
+              <button class="btn btn-sm btn-outline-secondary" id="addTechBtn" type="button">Add Technology</button>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label">Technology</label>
+                <input class="form-control" id="techName" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Experience</label>
+                <input class="form-control" id="techExp" />
+              </div>
+            </div>
+            <div class="mt-2" id="techList"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="teamSaveBtn" data-mode="create">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
