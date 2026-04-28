@@ -40,6 +40,14 @@ body {
   margin-top: 4px;
 }
 
+.util-ghost {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: rgba(31, 157, 85, 0.25);
+  transition: width 0.2s ease;
+}
+
 .util-fill {
   height: 100%;
   width: 0;

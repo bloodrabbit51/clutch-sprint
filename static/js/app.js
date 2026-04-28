@@ -31,6 +31,7 @@ function buildCapacityRow(person) {
       <div class="capacity-cell">
         <div class="capacity-value">-</div>
         <div class="util-bar">
+          <div class="util-ghost"></div>
           <div class="util-fill"></div>
           <div class="util-marker"></div>
         </div>
@@ -152,6 +153,21 @@ async function loadStories() {
 function getAssignedPointsByPerson() {
   const pointsByPerson = {};
   document.querySelectorAll("#storyTable tbody tr").forEach((row) => {
+    const status = row.querySelector(".status-select")?.value || "tentative";
+    if (status !== "confirmed") return;
+    const points = Number(row.children[1]?.textContent || 0);
+    const personId = Number(row.querySelector(".person-select")?.value || 0);
+    if (!personId) return;
+    pointsByPerson[personId] = (pointsByPerson[personId] || 0) + points;
+  });
+  return pointsByPerson;
+}
+
+function getTentativePointsByPerson() {
+  const pointsByPerson = {};
+  document.querySelectorAll("#storyTable tbody tr").forEach((row) => {
+    const status = row.querySelector(".status-select")?.value || "tentative";
+    if (status !== "tentative") return;
     const points = Number(row.children[1]?.textContent || 0);
     const personId = Number(row.querySelector(".person-select")?.value || 0);
     if (!personId) return;
@@ -163,16 +179,22 @@ function getAssignedPointsByPerson() {
 function updateUtilizationBars() {
   if (!currentSprint) return;
   const assignedPoints = getAssignedPointsByPerson();
+  const tentativePoints = getTentativePointsByPerson();
   document.querySelectorAll("#capacityTable tbody tr").forEach((row) => {
     const personId = Number(row.dataset.personId);
     const totalCapacity = Number(row.dataset.totalCapacity || 0);
     const usedPoints = Number(assignedPoints[personId] || 0);
+    const pendingPoints = Number(tentativePoints[personId] || 0);
     const percent = totalCapacity > 0 ? (usedPoints / totalCapacity) * 100 : 0;
+    const ghostPercent = totalCapacity > 0 ? ((usedPoints + pendingPoints) / totalCapacity) * 100 : 0;
     const clamped = Math.min(percent, 100);
+    const ghostClamped = Math.min(ghostPercent, 100);
     const fill = row.querySelector(".util-fill");
+    const ghost = row.querySelector(".util-ghost");
     const label = row.querySelector(".util-label");
-    if (!fill || !label) return;
+    if (!fill || !ghost || !label) return;
     fill.style.width = `${clamped}%`;
+    ghost.style.width = `${ghostClamped}%`;
     const isOver = percent > 100;
     fill.classList.toggle("util-over", isOver);
     label.textContent = `${percent.toFixed(0)}%`;
