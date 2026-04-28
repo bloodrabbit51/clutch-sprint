@@ -129,6 +129,7 @@ async function loadStories() {
     const row = document.createElement("tr");
     row.dataset.storyId = story.id;
     row.innerHTML = `
+      <td>${story.feature_name || "Others"}</td>
       <td>${story.name}</td>
       <td>${story.story_points}</td>
       <td>${buildPeopleSelect(story.assigned_person_id)}</td>
@@ -155,7 +156,7 @@ function getAssignedPointsByPerson() {
   document.querySelectorAll("#storyTable tbody tr").forEach((row) => {
     const status = row.querySelector(".status-select")?.value || "tentative";
     if (status !== "confirmed") return;
-    const points = Number(row.children[1]?.textContent || 0);
+    const points = Number(row.children[2]?.textContent || 0);
     const personId = Number(row.querySelector(".person-select")?.value || 0);
     if (!personId) return;
     pointsByPerson[personId] = (pointsByPerson[personId] || 0) + points;
@@ -168,7 +169,7 @@ function getTentativePointsByPerson() {
   document.querySelectorAll("#storyTable tbody tr").forEach((row) => {
     const status = row.querySelector(".status-select")?.value || "tentative";
     if (status !== "tentative") return;
-    const points = Number(row.children[1]?.textContent || 0);
+    const points = Number(row.children[2]?.textContent || 0);
     const personId = Number(row.querySelector(".person-select")?.value || 0);
     if (!personId) return;
     pointsByPerson[personId] = (pointsByPerson[personId] || 0) + points;
@@ -409,6 +410,11 @@ async function initSprintPlan() {
   const sprintStart = document.getElementById("sprintStart");
   const sprintEnd = document.getElementById("sprintEnd");
   const sprintContainer = document.getElementById("sprintHeading");
+  const storyType = document.getElementById("storyType");
+  const storyBacklogFields = document.getElementById("storyBacklogFields");
+  const storyOtherFields = document.getElementById("storyOtherFields");
+  const storyFeature = document.getElementById("storyFeature");
+  const storyBacklog = document.getElementById("storyBacklog");
   if (sprintContainer) {
     isViewOnly = sprintContainer.dataset.viewOnly === "true";
   }
@@ -455,6 +461,7 @@ async function initSprintPlan() {
       }
       await renderCapacityTable();
       await loadStories();
+      await loadBacklogFeatures();
     });
   }
 
@@ -535,20 +542,42 @@ async function initSprintPlan() {
   if (createStoryBtn) {
     createStoryBtn.addEventListener("click", async () => {
       if (!currentSprint) return;
-      const name = document.getElementById("storyName").value.trim();
-      const storyPoints = Number(document.getElementById("storyPoints").value || 0);
-      if (!name || storyPoints <= 0) return;
-      await fetchJson("/api/userstory/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sprint_id: currentSprint.id,
-          name,
-          story_points: storyPoints,
-        }),
-      });
-      document.getElementById("storyName").value = "";
-      document.getElementById("storyPoints").value = "";
+      const selectedType = storyType?.value || "other";
+      if (selectedType === "backlog") {
+        if (storyFeature && storyFeature.options.length === 0) {
+          await loadBacklogFeatures();
+        }
+        const featureName = storyFeature?.selectedOptions?.[0]?.textContent || "";
+        const backlogStoryName = storyBacklog?.selectedOptions?.[0]?.textContent || "";
+        const backlogPoints = Number(storyBacklog?.selectedOptions?.[0]?.dataset?.points || 0);
+        if (!featureName || !backlogStoryName || backlogPoints <= 0) return;
+        await fetchJson("/api/userstory/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sprint_id: currentSprint.id,
+            name: backlogStoryName,
+            story_points: backlogPoints,
+            feature_name: featureName,
+          }),
+        });
+      } else {
+        const name = document.getElementById("storyName").value.trim();
+        const storyPoints = Number(document.getElementById("storyPoints").value || 0);
+        if (!name || storyPoints <= 0) return;
+        await fetchJson("/api/userstory/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sprint_id: currentSprint.id,
+            name,
+            story_points: storyPoints,
+            feature_name: "Others",
+          }),
+        });
+        document.getElementById("storyName").value = "";
+        document.getElementById("storyPoints").value = "";
+      }
       await loadStories();
       markDirty();
     });
@@ -559,6 +588,51 @@ async function initSprintPlan() {
   }
   if (sprintEnd) {
     sprintEnd.addEventListener("input", updateSprintNameField);
+  }
+
+  async function loadBacklogFeatures() {
+    if (!currentSprint || !storyFeature) return;
+    const features = await fetchJson(`/api/backlog/feature/list?project_id=${currentSprint.project_id}`);
+    storyFeature.innerHTML = "";
+    features.forEach((feature) => {
+      const option = document.createElement("option");
+      option.value = feature.id;
+      const description = feature.description ? ` - ${feature.description}` : "";
+      option.textContent = `${feature.feature_key}${description}`;
+      storyFeature.appendChild(option);
+    });
+    await loadBacklogStories();
+  }
+
+  async function loadBacklogStories() {
+    if (!storyBacklog || !storyFeature) return;
+    const featureId = storyFeature.value;
+    if (!featureId) return;
+    const stories = await fetchJson(`/api/backlog/story/by_feature?feature_id=${featureId}`);
+    storyBacklog.innerHTML = "";
+    stories.forEach((story) => {
+      const option = document.createElement("option");
+      option.value = story.id;
+      option.textContent = story.name;
+      option.dataset.points = story.story_points;
+      storyBacklog.appendChild(option);
+    });
+  }
+
+  function toggleStoryType() {
+    if (!storyType || !storyBacklogFields || !storyOtherFields) return;
+    const isBacklog = storyType.value === "backlog";
+    storyBacklogFields.classList.toggle("d-none", !isBacklog);
+    storyOtherFields.classList.toggle("d-none", isBacklog);
+  }
+
+  if (storyType) {
+    storyType.addEventListener("change", toggleStoryType);
+    toggleStoryType();
+  }
+
+  if (storyFeature) {
+    storyFeature.addEventListener("change", loadBacklogStories);
   }
 
   document.querySelectorAll("a.nav-link").forEach((link) => {
@@ -595,6 +669,7 @@ async function initSprintPlan() {
       });
       await updateCapacity();
       await loadStories();
+      await loadBacklogFeatures();
       updateSaveButton();
       updateEditButton();
       applyViewOnlyMode();
@@ -604,6 +679,7 @@ async function initSprintPlan() {
     updateSprintToggleButton();
     updateSaveButton();
     updateEditButton();
+    await loadBacklogFeatures();
     applyViewOnlyMode();
   }
 }

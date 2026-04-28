@@ -66,6 +66,7 @@ class UserStory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sprint_id = db.Column(db.Integer, db.ForeignKey("sprints.id"), nullable=False)
     name = db.Column(db.String(200), nullable=False)
+    feature_name = db.Column(db.String(200))
     story_points = db.Column(db.Integer, nullable=False)
     assigned_person_id = db.Column(db.Integer, db.ForeignKey("people.id"), nullable=True)
     status = db.Column(db.String(20), default="tentative")
@@ -83,6 +84,7 @@ class SprintCapacity(db.Model):
 
 
 class BacklogFeature(db.Model):
+    __bind_key__ = "backlog"
     __tablename__ = "backlog_features"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -95,6 +97,7 @@ class BacklogFeature(db.Model):
 
 
 class BacklogMeta(db.Model):
+    __bind_key__ = "backlog"
     __tablename__ = "backlog_meta"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -105,6 +108,7 @@ class BacklogMeta(db.Model):
 
 
 class BacklogStory(db.Model):
+    __bind_key__ = "backlog"
     __tablename__ = "backlog_stories"
 
     id = db.Column(db.Integer, primary_key=True)

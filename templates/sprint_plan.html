@@ -44,7 +44,8 @@
       <table class="table table-sm align-middle" id="storyTable">
         <thead>
           <tr>
-            <th>Name</th>
+            <th>Feature</th>
+            <th>User Story</th>
             <th>Points</th>
             <th>Assigned</th>
             <th>Status</th>
@@ -128,12 +129,31 @@
       </div>
       <div class="modal-body">
         <div class="mb-3">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="storyType">
+            <option value="backlog">Backlog</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div id="storyBacklogFields">
+          <div class="mb-3">
+            <label class="form-label">Feature</label>
+            <select class="form-select" id="storyFeature"></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">User Story</label>
+            <select class="form-select" id="storyBacklog"></select>
+          </div>
+        </div>
+        <div id="storyOtherFields" class="d-none">
+        <div class="mb-3">
           <label class="form-label">Name</label>
           <input class="form-control" id="storyName" />
         </div>
         <div class="mb-3">
           <label class="form-label">Story Points</label>
           <input type="number" class="form-control" id="storyPoints" min="1" />
+        </div>
         </div>
       </div>
       <div class="modal-footer">

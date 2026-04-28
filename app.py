@@ -668,6 +668,26 @@ def api_backlog_story_list():
     ])
 
 
+@app.get("/api/backlog/story/by_feature")
+@login_required
+def api_backlog_story_by_feature():
+    feature_id = request.args.get("feature_id")
+    if not feature_id:
+        return jsonify([])
+    feature = BacklogFeature.query.get(int(feature_id))
+    if not feature or feature.created_by != session["user_id"]:
+        return jsonify([])
+    stories = BacklogStory.query.filter_by(feature_id=feature.id).order_by(BacklogStory.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "name": s.name,
+            "story_points": s.story_points,
+        }
+        for s in stories
+    ])
+
+
 @app.post("/api/backlog/story/create")
 @login_required
 def api_backlog_story_create():
@@ -1038,6 +1058,7 @@ def api_userstory_list():
         {
             "id": s.id,
             "name": s.name,
+            "feature_name": s.feature_name,
             "story_points": s.story_points,
             "assigned_person_id": s.assigned_person_id,
             "status": s.status,
@@ -1055,12 +1076,14 @@ def api_userstory_create():
     if not sprint or sprint.created_by != session["user_id"]:
         return jsonify({"error": "Forbidden"}), 403
     name = (data.get("name") or "").strip()
+    feature_name = (data.get("feature_name") or "").strip()
     story_points = int(data.get("story_points", 0))
     if not name or story_points <= 0:
         return jsonify({"error": "Invalid input"}), 400
     story = UserStory(
         sprint_id=sprint_id,
         name=name,
+        feature_name=feature_name or None,
         story_points=story_points,
         assigned_person_id=data.get("assigned_person_id"),
         status=data.get("status", "tentative"),
