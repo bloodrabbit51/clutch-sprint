@@ -1,0 +1,19 @@
+services:
+  clutch-sprint:
+    image: python:3.12-alpine
+    container_name: clutch-sprint
+    working_dir: /app/repo/src
+    command: >-
+      sh -c "apk add --no-cache git \
+      && mkdir -p /app/repo/src /app/repo/instance \
+      && if [ -d /app/repo/src/.git ]; then git -C /app/repo/src pull; else if [ -z \"$(ls -A /app/repo/src 2>/dev/null)\" ]; then git clone -b master https://github.com/bloodrabbit51/clutch-sprint.git /app/repo/src; else echo 'Source directory not empty; skipping clone'; fi; fi \
+      && if [ -f /app/repo/src/requirements.txt ]; then pip install --no-cache-dir -r /app/repo/src/requirements.txt; else pip install --no-cache-dir Flask SQLAlchemy Werkzeug openpyxl; fi \
+      && if [ -f /app/repo/src/app.py ]; then python /app/repo/src/app.py; else echo 'app.py not found in repo root'; sleep 5; fi"
+    ports:
+      - "8500:5000"
+    volumes:
+      - ./instance:/app/repo/instance
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_INSTANCE_PATH=/app/repo/instance
+    restart: unless-stopped
