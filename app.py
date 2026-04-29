@@ -237,7 +237,78 @@ def reset_password(token):
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    user_id = session["user_id"]
+    projects = Project.query.filter_by(created_by=user_id).order_by(Project.name).all()
+    sprint_counts = []
+    for project in projects:
+        sprint_counts.append({
+            "project": project.name,
+            "count": Sprint.query.filter_by(project_id=project.id, created_by=user_id).count(),
+        })
+    max_sprints = max([item["count"] for item in sprint_counts], default=0)
+
+    features = BacklogFeature.query.filter_by(created_by=user_id).order_by(BacklogFeature.project_name, BacklogFeature.feature_key).all()
+    feature_ids = [feature.id for feature in features]
+    totals_map = {}
+    remaining_map = {}
+    if feature_ids:
+        total_rows = (
+            db.session.query(BacklogStory.feature_id, db.func.sum(BacklogStory.story_points))
+            .filter(BacklogStory.feature_id.in_(feature_ids), BacklogStory.created_by == user_id)
+            .group_by(BacklogStory.feature_id)
+            .all()
+        )
+        totals_map = {row[0]: int(row[1] or 0) for row in total_rows}
+
+        remaining_rows = (
+            db.session.query(BacklogStory.feature_id, db.func.sum(BacklogStory.story_points))
+            .filter(
+                BacklogStory.feature_id.in_(feature_ids),
+                BacklogStory.created_by == user_id,
+                BacklogStory.is_closed.is_(False),
+            )
+            .group_by(BacklogStory.feature_id)
+            .all()
+        )
+        remaining_map = {row[0]: int(row[1] or 0) for row in remaining_rows}
+
+    feature_progress = {}
+    for feature in features:
+        total = totals_map.get(feature.id, 0)
+        remaining = remaining_map.get(feature.id, 0)
+        percent = 0
+        if total > 0:
+            percent = int(round(((total - remaining) / total) * 100))
+        feature_progress.setdefault(feature.project_name, []).append({
+            "feature_key": feature.feature_key,
+            "description": feature.description,
+            "total": total,
+            "remaining": remaining,
+            "percent": percent,
+        })
+
+    feature_cards = []
+    for project_name, items in feature_progress.items():
+        total_days = sum(item["total"] for item in items)
+        remaining_days = sum(item["remaining"] for item in items)
+        overall_percent = 0
+        if total_days > 0:
+            overall_percent = int(round(((total_days - remaining_days) / total_days) * 100))
+        feature_cards.append({
+            "project": project_name,
+            "total": total_days,
+            "remaining": remaining_days,
+            "percent": overall_percent,
+            "features": items,
+        })
+    feature_cards.sort(key=lambda item: item["project"])
+
+    return render_template(
+        "dashboard.html",
+        sprint_counts=sprint_counts,
+        max_sprints=max_sprints,
+        feature_cards=feature_cards,
+    )
 
 
 @app.route("/sprint")

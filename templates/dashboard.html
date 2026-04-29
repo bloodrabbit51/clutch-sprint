@@ -42,4 +42,72 @@
 		</div>
 	</div>
 </div>
+
+<div class="row g-3 mt-1">
+	<div class="col-lg-5">
+		<div class="card dashboard-card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<div>
+						<p class="eyebrow mb-1">Sprint Pulse</p>
+						<h5 class="mb-0">Sprints by project</h5>
+					</div>
+				</div>
+				{% if sprint_counts %}
+				<div class="dash-list">
+					{% for item in sprint_counts %}
+					<div class="dash-row">
+						<div class="dash-label">
+							<span class="dash-title">{{ item.project }}</span>
+							<span class="dash-meta">{{ item.count }} sprint{{ '' if item.count == 1 else 's' }}</span>
+						</div>
+						<div class="dash-bar">
+							<div class="dash-bar-fill" style="width: {{ (item.count / max_sprints * 100) if max_sprints else 0 }}%"></div>
+						</div>
+					</div>
+					{% endfor %}
+				</div>
+				{% else %}
+				<p class="text-muted mb-0">No projects created yet.</p>
+				{% endif %}
+			</div>
+		</div>
+	</div>
+	<div class="col-lg-7">
+		{% if feature_cards %}
+		<div class="feature-flow">
+			{% for card in feature_cards %}
+			<div class="feature-card">
+				<div class="feature-card-header">
+					<div>
+						<div class="feature-group-title">{{ card.project }}</div>
+						<div class="feature-meta">{{ card.remaining }} of {{ card.total }} days left · {{ card.percent }}% done</div>
+					</div>
+					<div class="feature-progress">{{ card.percent }}%</div>
+				</div>
+				<div class="feature-bar">
+					<div class="feature-bar-fill" style="width: {{ card.percent }}%"></div>
+				</div>
+				<div class="feature-grid">
+					{% for feature in card.features %}
+					<div class="feature-row">
+						<div class="feature-info">
+							<div class="feature-key">{{ feature.feature_key }}</div>
+							<div class="feature-desc">{{ feature.description }}</div>
+						</div>
+						<div class="feature-bar">
+							<div class="feature-bar-fill" style="width: {{ feature.percent }}%"></div>
+						</div>
+						<div class="feature-meta">{{ feature.remaining }} of {{ feature.total }} days left · {{ feature.percent }}% done</div>
+					</div>
+					{% endfor %}
+				</div>
+			</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<p class="text-muted mb-0">No backlog features yet. Add features to start tracking progress.</p>
+		{% endif %}
+	</div>
+</div>
 {% endblock %}

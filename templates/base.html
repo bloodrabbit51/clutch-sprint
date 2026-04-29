@@ -14,7 +14,7 @@
   {% if session.get('user_id') %}
   <div class="d-flex">
     <aside class="sidebar p-3">
-      <h5 class="mb-4">Clutch Sprint</h5>
+      <h5 class="mb-4"><a class="text-decoration-none text-reset" href="{{ url_for('dashboard') }}">Clutch Sprint</a></h5>
       <nav class="nav flex-column">
         <a class="nav-link" href="{{ url_for('sprint_plan') }}">Sprint Plan</a>
         <a class="nav-link" href="{{ url_for('project_plan') }}">Project Backlog</a>

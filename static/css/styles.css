@@ -124,6 +124,144 @@ body {
   animation: riseIn 0.6s ease forwards;
 }
 
+.dashboard-card {
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.dash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dash-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.dash-title {
+  font-weight: 600;
+}
+
+.dash-meta {
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+.dash-bar {
+  height: 10px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dash-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #0ea5a4, #34d399);
+  transition: width 0.4s ease;
+}
+
+.feature-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.feature-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.feature-card {
+  max-width: 640px;
+  padding: 1.25rem;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+
+.feature-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.feature-progress {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--brand-600);
+}
+
+.feature-group {
+  padding: 1rem;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.feature-group-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--ink-700);
+}
+
+.feature-row {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.feature-row:last-child {
+  border-bottom: none;
+}
+
+.feature-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.feature-key {
+  font-weight: 600;
+}
+
+.feature-desc {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+}
+
+.feature-bar {
+  height: 8px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.6rem 0 0.35rem;
+}
+
+.feature-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  transition: width 0.4s ease;
+}
+
+.feature-meta {
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;
