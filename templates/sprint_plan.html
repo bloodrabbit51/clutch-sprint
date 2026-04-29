@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 id="sprintHeading" data-sprint-id="{{ sprint_id or '' }}" data-view-only="{{ 'true' if view_only else 'false' }}">Sprint Plan</h2>
+  <h2 id="sprintHeading" data-sprint-id="{{ sprint_id or '' }}" data-view-only="{{ 'true' if view_only else 'false' }}" data-closure="{{ 'true' if closure_view else 'false' }}">Sprint Plan</h2>
   <div class="d-flex gap-2">
     <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#sprintHelpModal">Help</button>
     <button class="btn btn-success" id="saveSprintBtn" disabled>Save</button>
@@ -11,6 +11,7 @@
   </div>
 </div>
 
+{% if not closure_view %}
 <div class="card mb-4">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-center">
@@ -34,6 +35,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <div class="card">
   <div class="card-body">

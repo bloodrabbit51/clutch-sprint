@@ -13,6 +13,7 @@ let storiesCache = [];
 let isDirty = false;
 let isSaved = false;
 let isViewOnly = false;
+let isClosureView = false;
 
 async function loadPeople() {
   peopleCache = await fetchJson("/api/people/list");
@@ -124,17 +125,25 @@ async function loadStories() {
     return;
   }
 
-  storiesCache = await fetchJson(`/api/userstory/list?sprint_id=${currentSprint.id}`);
+  const includeClosed = isViewOnly || isClosureView ? "true" : "false";
+  storiesCache = await fetchJson(`/api/userstory/list?sprint_id=${currentSprint.id}&include_closed=${includeClosed}`);
   storiesCache.forEach((story) => {
     const row = document.createElement("tr");
     row.dataset.storyId = story.id;
+    row.dataset.backlogStoryId = story.backlog_story_id || "";
+    if (story.is_closed) {
+      row.classList.add("table-light", "text-muted");
+    }
+    const actionButton = isClosureView
+      ? `<button class="btn btn-sm btn-outline-success close-story" ${story.is_closed ? "disabled" : ""}>${story.is_closed ? "Closed" : "Completed"}</button>`
+      : `<button class="btn btn-sm btn-outline-danger delete-story">Delete</button>`;
     row.innerHTML = `
       <td>${story.feature_name || "Others"}</td>
       <td>${story.name}</td>
       <td>${story.story_points}</td>
       <td>${buildPeopleSelect(story.assigned_person_id)}</td>
       <td>${buildStatusSelect(story.status)}</td>
-      <td><button class="btn btn-sm btn-outline-danger delete-story">Delete</button></td>
+      <td>${actionButton}</td>
     `;
     tableBody.appendChild(row);
   });
@@ -144,9 +153,21 @@ async function loadStories() {
     select.addEventListener("change", markDirty);
   });
 
-  tableBody.querySelectorAll(".delete-story").forEach((button) => {
-    button.addEventListener("click", onDeleteStory);
-  });
+  if (isClosureView) {
+    tableBody.querySelectorAll("select").forEach((select) => {
+      select.setAttribute("disabled", "disabled");
+    });
+  }
+
+  if (isClosureView) {
+    tableBody.querySelectorAll(".close-story").forEach((button) => {
+      button.addEventListener("click", onCloseStory);
+    });
+  } else {
+    tableBody.querySelectorAll(".delete-story").forEach((button) => {
+      button.addEventListener("click", onDeleteStory);
+    });
+  }
 
   updateUtilizationBars();
 }
@@ -246,6 +267,26 @@ async function onDeleteStory(event) {
   await loadStories();
   markDirty();
   updateUtilizationBars();
+}
+
+async function onCloseStory(event) {
+  const row = event.target.closest("tr");
+  const storyId = Number(row.dataset.storyId);
+  const backlogStoryId = Number(row.dataset.backlogStoryId || 0);
+  if (!storyId) return;
+  await fetchJson("/api/userstory/close", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: storyId }),
+  });
+  if (backlogStoryId) {
+    await fetchJson("/api/backlog/story/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: backlogStoryId }),
+    });
+  }
+  await loadStories();
 }
 
 async function onDeletePerson(event) {
@@ -360,7 +401,7 @@ function setSprintModalMode(mode) {
 function updateSaveButton() {
   const button = document.getElementById("saveSprintBtn");
   if (!button) return;
-  if (isViewOnly) {
+  if (isViewOnly || isClosureView) {
     button.disabled = true;
     return;
   }
@@ -400,6 +441,23 @@ function applyViewOnlyMode() {
   });
 }
 
+function applyClosureMode() {
+  if (!isClosureView) return;
+  const saveBtn = document.getElementById("saveSprintBtn");
+  const toggleBtn = document.getElementById("sprintToggleBtn");
+  const editBtn = document.getElementById("editSprintBtn");
+  const addPeopleBtn = document.getElementById("addPeopleBtn");
+  const addStoryBtn = document.getElementById("addUserStoryBtn");
+  if (saveBtn) saveBtn.classList.add("d-none");
+  if (toggleBtn) toggleBtn.classList.add("d-none");
+  if (editBtn) editBtn.classList.add("d-none");
+  if (addPeopleBtn) addPeopleBtn.classList.add("d-none");
+  if (addStoryBtn) addStoryBtn.classList.add("d-none");
+  document.querySelectorAll("#storyTable select").forEach((el) => {
+    el.setAttribute("disabled", "disabled");
+  });
+}
+
 async function initSprintPlan() {
   const createSprintBtn = document.getElementById("createSprintBtn");
   const sprintToggleBtn = document.getElementById("sprintToggleBtn");
@@ -419,10 +477,11 @@ async function initSprintPlan() {
   const addUserStoryBtn = document.getElementById("addUserStoryBtn");
   if (sprintContainer) {
     isViewOnly = sprintContainer.dataset.viewOnly === "true";
+    isClosureView = sprintContainer.dataset.closure === "true";
   }
 
   function updateSprintActionButtons() {
-    const enabled = !!currentSprint && !isViewOnly;
+    const enabled = !!currentSprint && !isViewOnly && !isClosureView;
     if (addPeopleBtn) addPeopleBtn.disabled = !enabled;
     if (addUserStoryBtn) addUserStoryBtn.disabled = !enabled;
   }
@@ -557,9 +616,10 @@ async function initSprintPlan() {
         if (storyFeature && storyFeature.options.length === 0) {
           await loadBacklogFeatures();
         }
-        const featureName = storyFeature?.selectedOptions?.[0]?.textContent || "";
+        const featureName = storyFeature?.selectedOptions?.[0]?.dataset?.featureKey || "";
         const backlogStoryName = storyBacklog?.selectedOptions?.[0]?.textContent || "";
         const backlogPoints = Number(storyBacklog?.selectedOptions?.[0]?.dataset?.points || 0);
+        const backlogStoryId = Number(storyBacklog?.value || 0);
         if (!featureName || !backlogStoryName || backlogPoints <= 0) return;
         await fetchJson("/api/userstory/create", {
           method: "POST",
@@ -569,6 +629,7 @@ async function initSprintPlan() {
             name: backlogStoryName,
             story_points: backlogPoints,
             feature_name: featureName,
+            backlog_story_id: backlogStoryId,
           }),
         });
       } else {
@@ -619,6 +680,7 @@ async function initSprintPlan() {
       option.value = feature.id;
       const description = feature.description ? ` - ${feature.description}` : "";
       option.textContent = `${feature.feature_key}${description}`;
+      option.dataset.featureKey = feature.feature_key;
       storyFeature.appendChild(option);
     });
     await loadBacklogStories();
@@ -631,6 +693,7 @@ async function initSprintPlan() {
     const stories = await fetchJson(`/api/backlog/story/by_feature?feature_id=${featureId}`);
     storyBacklog.innerHTML = "";
     stories.forEach((story) => {
+      if (story.is_closed) return;
       const option = document.createElement("option");
       option.value = story.id;
       option.textContent = story.name;
@@ -694,6 +757,7 @@ async function initSprintPlan() {
       updateEditButton();
       updateSprintActionButtons();
       applyViewOnlyMode();
+      applyClosureMode();
     }
   } else {
     updateSprintHeading();
@@ -703,6 +767,7 @@ async function initSprintPlan() {
     updateSprintActionButtons();
     await loadBacklogFeatures();
     applyViewOnlyMode();
+    applyClosureMode();
   }
 }
 
@@ -720,6 +785,7 @@ async function initPreviousSprints() {
       <td>
         <a class="btn btn-sm btn-outline-primary" href="/sprint/${sprint.id}/plan">Plan</a>
         <a class="btn btn-sm btn-outline-secondary" href="/sprint/${sprint.id}/view">View</a>
+        <a class="btn btn-sm btn-outline-success" href="/sprint/${sprint.id}/closure">Closure</a>
       </td>
     `;
     tableBody.appendChild(row);
@@ -759,7 +825,7 @@ async function initProjectsPage() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  if (document.getElementById("capacityTable")) {
+  if (document.getElementById("sprintHeading") || document.getElementById("storyTable")) {
     initSprintPlan();
   }
   if (document.getElementById("projectsTable")) {
@@ -1271,24 +1337,40 @@ async function initProjectPlan() {
   async function loadStories() {
     if (!currentProject) return;
     const stories = await fetchJson(`/api/backlog/story/list?project_id=${currentProject.id}`);
+    stories.sort((a, b) => Number(a.is_closed) - Number(b.is_closed));
     const body = document.querySelector("#backlogStoryTable tbody");
     body.innerHTML = "";
     stories.forEach((story) => {
       const feature = featuresCache.find((f) => f.id === story.feature_id);
       const row = document.createElement("tr");
       row.dataset.storyId = story.id;
+      if (story.is_closed) {
+        row.classList.add("table-light", "text-muted");
+      }
+      const statusButton = story.is_closed
+        ? `<button class="btn btn-sm btn-outline-secondary story-open">Open</button>`
+        : `<button class="btn btn-sm btn-outline-success story-complete">Complete</button>`;
       row.innerHTML = `
         <td>${feature ? feature.feature_key : ""}</td>
         <td>${story.name}</td>
         <td>${story.tshirt_size}</td>
         <td>${story.story_points}</td>
         <td>${story.days}</td>
-        <td><button class="btn btn-sm btn-outline-danger story-delete">Delete</button></td>
+        <td>
+          ${statusButton}
+          <button class="btn btn-sm btn-outline-danger story-delete">Delete</button>
+        </td>
       `;
       body.appendChild(row);
     });
     body.querySelectorAll(".story-delete").forEach((btn) => {
       btn.addEventListener("click", onDeleteStory);
+    });
+    body.querySelectorAll(".story-complete").forEach((btn) => {
+      btn.addEventListener("click", onCompleteStory);
+    });
+    body.querySelectorAll(".story-open").forEach((btn) => {
+      btn.addEventListener("click", onOpenStory);
     });
     applyStoryFilter();
   }
@@ -1399,6 +1481,26 @@ async function initProjectPlan() {
     const confirmDelete = window.confirm("Are you sure you want to delete?");
     if (!confirmDelete) return;
     await fetchJson("/api/backlog/story/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(row.dataset.storyId) }),
+    });
+    await refreshBacklog();
+  }
+
+  async function onCompleteStory(event) {
+    const row = event.target.closest("tr");
+    await fetchJson("/api/backlog/story/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(row.dataset.storyId) }),
+    });
+    await refreshBacklog();
+  }
+
+  async function onOpenStory(event) {
+    const row = event.target.closest("tr");
+    await fetchJson("/api/backlog/story/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: Number(row.dataset.storyId) }),

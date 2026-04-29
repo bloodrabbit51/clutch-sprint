@@ -67,9 +67,11 @@ class UserStory(db.Model):
     sprint_id = db.Column(db.Integer, db.ForeignKey("sprints.id"), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     feature_name = db.Column(db.String(200))
+    backlog_story_id = db.Column(db.Integer)
     story_points = db.Column(db.Integer, nullable=False)
     assigned_person_id = db.Column(db.Integer, db.ForeignKey("people.id"), nullable=True)
     status = db.Column(db.String(20), default="tentative")
+    is_closed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -118,6 +120,8 @@ class BacklogStory(db.Model):
     tshirt_size = db.Column(db.String(10), nullable=False)
     story_points = db.Column(db.Integer, nullable=False)
     days = db.Column(db.Integer, nullable=False)
+    is_closed = db.Column(db.Boolean, default=False)
+    closed_at = db.Column(db.DateTime)
     created_by = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

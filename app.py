@@ -104,19 +104,25 @@ def dashboard():
 @app.route("/sprint")
 @login_required
 def sprint_plan():
-    return render_template("sprint_plan.html", sprint_id=None, view_only=False)
+    return render_template("sprint_plan.html", sprint_id=None, view_only=False, closure_view=False)
 
 
 @app.route("/sprint/<int:sprint_id>/plan")
 @login_required
 def sprint_plan_load(sprint_id):
-    return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=False)
+    return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=False, closure_view=False)
 
 
 @app.route("/sprint/<int:sprint_id>/view")
 @login_required
 def sprint_plan_view(sprint_id):
-    return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=True)
+    return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=True, closure_view=False)
+
+
+@app.route("/sprint/<int:sprint_id>/closure")
+@login_required
+def sprint_plan_closure(sprint_id):
+    return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=False, closure_view=True)
 
 
 @app.route("/projects")
@@ -469,7 +475,7 @@ def api_backlog_feature_list():
     if feature_ids:
         rows = (
             db.session.query(BacklogStory.feature_id, db.func.sum(BacklogStory.story_points))
-            .filter(BacklogStory.feature_id.in_(feature_ids))
+            .filter(BacklogStory.feature_id.in_(feature_ids), BacklogStory.is_closed.is_(False))
             .group_by(BacklogStory.feature_id)
             .all()
         )
@@ -663,6 +669,7 @@ def api_backlog_story_list():
             "tshirt_size": s.tshirt_size,
             "story_points": s.story_points,
             "days": s.days,
+            "is_closed": s.is_closed,
         }
         for s in stories
     ])
@@ -677,7 +684,7 @@ def api_backlog_story_by_feature():
     feature = BacklogFeature.query.get(int(feature_id))
     if not feature or feature.created_by != session["user_id"]:
         return jsonify([])
-    stories = BacklogStory.query.filter_by(feature_id=feature.id).order_by(BacklogStory.created_at.desc()).all()
+    stories = BacklogStory.query.filter_by(feature_id=feature.id, is_closed=False).order_by(BacklogStory.created_at.desc()).all()
     return jsonify([
         {
             "id": s.id,
@@ -686,6 +693,36 @@ def api_backlog_story_by_feature():
         }
         for s in stories
     ])
+
+
+@app.post("/api/backlog/story/close")
+@login_required
+def api_backlog_story_close():
+    data = request.get_json(force=True)
+    story = BacklogStory.query.get(int(data.get("id")))
+    if not story:
+        return jsonify({"error": "Not found"}), 404
+    if story.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    story.is_closed = True
+    story.closed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/backlog/story/open")
+@login_required
+def api_backlog_story_open():
+    data = request.get_json(force=True)
+    story = BacklogStory.query.get(int(data.get("id")))
+    if not story:
+        return jsonify({"error": "Not found"}), 404
+    if story.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    story.is_closed = False
+    story.closed_at = None
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/backlog/story/create")
@@ -1048,18 +1085,24 @@ def count_working_days(start, end):
 @login_required
 def api_userstory_list():
     sprint_id = request.args.get("sprint_id")
+    include_closed = request.args.get("include_closed") == "true"
     if not sprint_id:
         return jsonify([])
     sprint = Sprint.query.get(int(sprint_id))
     if not sprint or sprint.created_by != session["user_id"]:
         return jsonify([])
-    stories = UserStory.query.filter_by(sprint_id=sprint.id).all()
+    story_query = UserStory.query.filter_by(sprint_id=sprint.id)
+    if not include_closed:
+        story_query = story_query.filter_by(is_closed=False)
+    stories = story_query.all()
     return jsonify([
         {
             "id": s.id,
             "name": s.name,
             "feature_name": s.feature_name,
             "story_points": s.story_points,
+            "backlog_story_id": s.backlog_story_id,
+            "is_closed": s.is_closed,
             "assigned_person_id": s.assigned_person_id,
             "status": s.status,
         }
@@ -1077,6 +1120,7 @@ def api_userstory_create():
         return jsonify({"error": "Forbidden"}), 403
     name = (data.get("name") or "").strip()
     feature_name = (data.get("feature_name") or "").strip()
+    backlog_story_id = data.get("backlog_story_id")
     story_points = int(data.get("story_points", 0))
     if not name or story_points <= 0:
         return jsonify({"error": "Invalid input"}), 400
@@ -1084,6 +1128,7 @@ def api_userstory_create():
         sprint_id=sprint_id,
         name=name,
         feature_name=feature_name or None,
+        backlog_story_id=int(backlog_story_id) if backlog_story_id else None,
         story_points=story_points,
         assigned_person_id=data.get("assigned_person_id"),
         status=data.get("status", "tentative"),
@@ -1105,6 +1150,26 @@ def api_userstory_update():
         return jsonify({"error": "Forbidden"}), 403
     story.assigned_person_id = data.get("assigned_person_id")
     story.status = data.get("status", story.status)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/userstory/close")
+@login_required
+def api_userstory_close():
+    data = request.get_json(force=True)
+    story = UserStory.query.get(int(data.get("id")))
+    if not story:
+        return jsonify({"error": "Not found"}), 404
+    sprint = Sprint.query.get(story.sprint_id)
+    if not sprint or sprint.created_by != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+    story.is_closed = True
+    if story.backlog_story_id:
+        backlog_story = BacklogStory.query.get(int(story.backlog_story_id))
+        if backlog_story and backlog_story.created_by == session["user_id"]:
+            backlog_story.is_closed = True
+            backlog_story.closed_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"ok": True})
 
