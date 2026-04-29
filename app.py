@@ -31,7 +31,7 @@ app.config["SQLALCHEMY_BINDS"] = {"backlog": "sqlite:///backlog.db"}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "dev-secret-change-me"
 app.config["ADMIN_USERNAME"] = "admin"
-app.config["ADMIN_PASSWORD"] = "qorix123"
+app.config["ADMIN_PASSWORD"] = "decoder123"
 app.config["RESET_TOKEN_EXPIRY_HOURS"] = 24
 
 db.init_app(app)
