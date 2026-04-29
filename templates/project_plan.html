@@ -3,6 +3,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2>Project Backlog</h2>
+  <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#backlogHelpModal">Help</button>
 </div>
 
 <div class="card mb-4">
@@ -180,4 +181,33 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="backlogHelpModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Project Backlog Help</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="backlogHelpContent" class="template-markdown">Loading help...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+  (async () => {
+    const container = document.getElementById("backlogHelpContent");
+    if (!container) return;
+    try {
+      const res = await fetch("{{ url_for('static', filename='backlog_help.md') }}");
+      const text = await res.text();
+      container.innerHTML = marked.parse(text);
+    } catch (err) {
+      container.textContent = "Unable to load help content.";
+    }
+  })();
+</script>
 {% endblock %}
