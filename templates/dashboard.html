@@ -1,6 +1,45 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2 class="mb-4">Dashboard</h2>
-<p>Welcome to Clutch Sprint. Use the sidebar to open Sprint Plan.</p>
+<div class="page-hero">
+	<div>
+		<p class="eyebrow">Clutch Sprint</p>
+		<h2 class="page-title">Delivery cockpit</h2>
+		<p class="page-subtitle">Jump back into planning, backlog shaping, and PI prep with a single click.</p>
+	</div>
+	<div class="hero-actions">
+		<a class="btn btn-primary" href="{{ url_for('sprint_plan') }}">Open Sprint Plan</a>
+		<a class="btn btn-outline-secondary" href="{{ url_for('project_plan') }}">Project Backlog</a>
+	</div>
+</div>
+
+<div class="row g-3">
+	<div class="col-md-6 col-xl-4">
+		<div class="card quick-card">
+			<div class="card-body">
+				<h5>PI Plan</h5>
+				<p>Align teams with quarterly capacity, productivity, and delivery goals.</p>
+				<a class="btn btn-sm btn-dark" href="{{ url_for('pi_plan') }}">Open PI Plan</a>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-6 col-xl-4">
+		<div class="card quick-card">
+			<div class="card-body">
+				<h5>Previous Sprints</h5>
+				<p>Review saved sprint plans, assignments, and utilization patterns.</p>
+				<a class="btn btn-sm btn-dark" href="{{ url_for('previous_sprints') }}">Browse</a>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-6 col-xl-4">
+		<div class="card quick-card">
+			<div class="card-body">
+				<h5>Templates</h5>
+				<p>Download CSV templates for fast feature and story imports.</p>
+				<a class="btn btn-sm btn-dark" href="{{ url_for('template_page') }}">Get Templates</a>
+			</div>
+		</div>
+	</div>
+</div>
 {% endblock %}
