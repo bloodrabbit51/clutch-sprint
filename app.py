@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import os
 import json
 import csv
 import hashlib
@@ -25,9 +26,18 @@ from models import (
 )
 
 
-app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sprintstream.db"
-app.config["SQLALCHEMY_BINDS"] = {"backlog": "sqlite:///backlog.db"}
+instance_override = os.environ.get("FLASK_INSTANCE_PATH")
+if instance_override:
+    app = Flask(__name__, instance_path=instance_override, instance_relative_config=True)
+else:
+    app = Flask(__name__, instance_relative_config=True)
+
+os.makedirs(app.instance_path, exist_ok=True)
+
+db_path = os.path.join(app.instance_path, "sprintstream.db")
+backlog_path = os.path.join(app.instance_path, "backlog.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_BINDS"] = {"backlog": f"sqlite:///{backlog_path}"}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "dev-secret-change-me"
 app.config["ADMIN_USERNAME"] = "admin"
