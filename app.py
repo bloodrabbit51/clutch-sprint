@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import json
 import csv
+import hashlib
+import secrets
 from io import BytesIO, StringIO, TextIOWrapper
 from flask import Flask, render_template, request, redirect, session, jsonify, url_for, send_from_directory, send_file
 from openpyxl import Workbook
@@ -19,6 +21,7 @@ from models import (
     BacklogStory,
     PIPlan,
     PITeamMember,
+    PasswordResetToken,
 )
 
 
@@ -27,6 +30,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sprintstream.db"
 app.config["SQLALCHEMY_BINDS"] = {"backlog": "sqlite:///backlog.db"}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "dev-secret-change-me"
+app.config["ADMIN_USERNAME"] = "admin"
+app.config["ADMIN_PASSWORD"] = "qorix123"
+app.config["RESET_TOKEN_EXPIRY_HOURS"] = 24
 
 db.init_app(app)
 
@@ -40,6 +46,16 @@ def login_required(view_func):
     def wrapped(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"))
+        return view_func(*args, **kwargs)
+
+    wrapped.__name__ = view_func.__name__
+    return wrapped
+
+
+def admin_required(view_func):
+    def wrapped(*args, **kwargs):
+        if not session.get("is_admin"):
+            return redirect(url_for("admin"))
         return view_func(*args, **kwargs)
 
     wrapped.__name__ = view_func.__name__
@@ -94,6 +110,128 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/admin", methods=["GET", "POST"])
+def admin():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if username == app.config["ADMIN_USERNAME"] and password == app.config["ADMIN_PASSWORD"]:
+            session["is_admin"] = True
+            return redirect(url_for("admin"))
+        return render_template("admin_login.html", error="Invalid credentials")
+
+    if not session.get("is_admin"):
+        return render_template("admin_login.html")
+
+    users = User.query.order_by(User.created_at.desc()).all()
+    summary = {}
+    for user in users:
+        summary[user.id] = {
+            "projects": Project.query.filter_by(created_by=user.id).count(),
+            "sprints": Sprint.query.filter_by(created_by=user.id).count(),
+        }
+    return render_template("admin.html", users=users, summary=summary)
+
+
+@app.post("/admin/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect(url_for("admin"))
+
+
+def hash_reset_token(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def delete_user_data(user_id):
+    sprints = Sprint.query.filter_by(created_by=user_id).all()
+    sprint_ids = [sprint.id for sprint in sprints]
+    if sprint_ids:
+        UserStory.query.filter(UserStory.sprint_id.in_(sprint_ids)).delete(synchronize_session=False)
+        Holiday.query.filter(Holiday.sprint_id.in_(sprint_ids)).delete(synchronize_session=False)
+        SprintCapacity.query.filter(SprintCapacity.sprint_id.in_(sprint_ids)).delete(synchronize_session=False)
+        Sprint.query.filter(Sprint.id.in_(sprint_ids)).delete(synchronize_session=False)
+
+    Person.query.filter_by(created_by=user_id).delete(synchronize_session=False)
+    Project.query.filter_by(created_by=user_id).delete(synchronize_session=False)
+
+    BacklogStory.query.filter_by(created_by=user_id).delete(synchronize_session=False)
+    BacklogFeature.query.filter_by(created_by=user_id).delete(synchronize_session=False)
+    BacklogMeta.query.filter_by(created_by=user_id).delete(synchronize_session=False)
+
+    plans = PIPlan.query.filter_by(created_by=user_id).all()
+    plan_ids = [plan.id for plan in plans]
+    if plan_ids:
+        PITeamMember.query.filter(PITeamMember.pi_plan_id.in_(plan_ids)).delete(synchronize_session=False)
+        PIPlan.query.filter(PIPlan.id.in_(plan_ids)).delete(synchronize_session=False)
+
+    PasswordResetToken.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+
+@app.post("/admin/user/<int:user_id>/delete")
+@admin_required
+def admin_delete_user(user_id):
+    user = User.query.get(int(user_id))
+    if not user:
+        return redirect(url_for("admin"))
+    delete_user_data(user.id)
+    db.session.delete(user)
+    db.session.commit()
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/user/<int:user_id>/reset")
+@admin_required
+def admin_reset_user(user_id):
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "Not found"}), 404
+    raw_token = secrets.token_urlsafe(32)
+    token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=hash_reset_token(raw_token),
+        expires_at=datetime.utcnow() + timedelta(hours=app.config["RESET_TOKEN_EXPIRY_HOURS"]),
+    )
+    db.session.add(token)
+    db.session.commit()
+    reset_link = url_for("reset_password", token=raw_token, _external=True)
+    return jsonify({"link": reset_link})
+
+
+@app.get("/admin/user/<int:user_id>/summary")
+@admin_required
+def admin_user_summary(user_id):
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "Not found"}), 404
+    project_count = Project.query.filter_by(created_by=user.id).count()
+    sprint_count = Sprint.query.filter_by(created_by=user.id).count()
+    return jsonify({"projects": project_count, "sprints": sprint_count})
+
+
+@app.route("/reset/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    token_hash = hash_reset_token(token)
+    record = PasswordResetToken.query.filter_by(token_hash=token_hash, used_at=None).first()
+    if not record or record.expires_at < datetime.utcnow():
+        return render_template("reset_password.html", error="This link is invalid or expired.")
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+        if not password or password != confirm:
+            return render_template("reset_password.html", error="Passwords must match.")
+        user = User.query.get(int(record.user_id))
+        if not user:
+            return render_template("reset_password.html", error="User not found.")
+        user.password_hash = generate_password_hash(password)
+        record.used_at = datetime.utcnow()
+        db.session.commit()
+        return render_template("reset_password.html", success="Password updated. You can log in now.")
+
+    return render_template("reset_password.html")
 
 
 @app.route("/dashboard")
