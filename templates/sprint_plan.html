@@ -5,6 +5,9 @@
   <h2 id="sprintHeading" data-sprint-id="{{ sprint_id or '' }}" data-view-only="{{ 'true' if view_only else 'false' }}" data-closure="{{ 'true' if closure_view else 'false' }}">Sprint Plan</h2>
   <div class="d-flex gap-2">
     <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#sprintHelpModal">Help</button>
+    {% if view_only and sprint_id and not closure_view %}
+    <a class="btn btn-outline-success" href="{{ url_for('sprint_export', sprint_id=sprint_id) }}">Export</a>
+    {% endif %}
     <button class="btn btn-success" id="saveSprintBtn" disabled>Save</button>
     <button class="btn btn-outline-primary" id="editSprintBtn" hidden>Edit Sprint</button>
     <button class="btn btn-primary" id="sprintToggleBtn">Create New Sprint</button>

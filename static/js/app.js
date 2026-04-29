@@ -1416,6 +1416,7 @@ async function initProjectPlan() {
         <td>${item.saved_at ? item.saved_at.slice(0, 10) : ""}</td>
         <td>
           <button class="btn btn-sm btn-outline-primary backlog-edit">Edit</button>
+          <button class="btn btn-sm btn-outline-success backlog-export">Export</button>
           <button class="btn btn-sm btn-outline-danger backlog-delete">Delete</button>
         </td>
       `;
@@ -1427,6 +1428,16 @@ async function initProjectPlan() {
     backlogListBody.querySelectorAll(".backlog-delete").forEach((btn) => {
       btn.addEventListener("click", onDeleteBacklog);
     });
+    backlogListBody.querySelectorAll(".backlog-export").forEach((btn) => {
+      btn.addEventListener("click", onExportBacklog);
+    });
+  }
+
+  function onExportBacklog(event) {
+    const row = event.target.closest("tr");
+    const projectId = Number(row.dataset.projectId);
+    if (!projectId) return;
+    window.location.href = `/api/backlog/export?project_id=${projectId}`;
   }
 
   function updateStoryDays() {

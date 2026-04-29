@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 import json
 import csv
-from io import TextIOWrapper
-from flask import Flask, render_template, request, redirect, session, jsonify, url_for, send_from_directory
+from io import BytesIO, StringIO, TextIOWrapper
+from flask import Flask, render_template, request, redirect, session, jsonify, url_for, send_from_directory, send_file
+from openpyxl import Workbook
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import (
     db,
@@ -117,6 +118,65 @@ def sprint_plan_load(sprint_id):
 @login_required
 def sprint_plan_view(sprint_id):
     return render_template("sprint_plan.html", sprint_id=sprint_id, view_only=True, closure_view=False)
+
+
+@app.route("/sprint/<int:sprint_id>/export")
+@login_required
+def sprint_export(sprint_id):
+    sprint = Sprint.query.get(int(sprint_id))
+    if not sprint or sprint.created_by != session["user_id"]:
+        return redirect(url_for("previous_sprints"))
+
+    workbook = Workbook()
+    people_sheet = workbook.active
+    people_sheet.title = "People"
+    people_sheet.append(["Name", "Leaves", "Allocation %", "Available Days", "Total Capacity"])
+
+    entries = SprintCapacity.query.filter_by(sprint_id=sprint.id).all()
+    person_ids = [entry.person_id for entry in entries]
+    people = Person.query.filter(Person.id.in_(person_ids)).all() if person_ids else []
+    people_by_id = {person.id: person.name for person in people}
+    total_days = count_working_days(sprint.start_date, sprint.end_date)
+    total_days = max(total_days - int(sprint.fixed_days_holiday or 0), 0)
+
+    for entry in sorted(entries, key=lambda e: people_by_id.get(e.person_id, "")):
+        available = max(total_days - int(entry.leaves or 0), 0)
+        total_capacity = round(available * (int(entry.allocation or 0) / 100.0), 2)
+        people_sheet.append([
+            people_by_id.get(entry.person_id, ""),
+            int(entry.leaves or 0),
+            int(entry.allocation or 0),
+            available,
+            total_capacity,
+        ])
+
+    story_sheet = workbook.create_sheet("User Stories")
+    story_sheet.append(["Feature", "User Story", "Points", "Assigned", "Status", "Closed"])
+    stories = UserStory.query.filter_by(sprint_id=sprint.id).all()
+    assigned_ids = [story.assigned_person_id for story in stories if story.assigned_person_id]
+    assigned_people = Person.query.filter(Person.id.in_(assigned_ids)).all() if assigned_ids else []
+    assigned_by_id = {person.id: person.name for person in assigned_people}
+
+    for story in stories:
+        story_sheet.append([
+            story.feature_name or "",
+            story.name,
+            int(story.story_points or 0),
+            assigned_by_id.get(story.assigned_person_id, "") if story.assigned_person_id else "",
+            story.status,
+            "Yes" if story.is_closed else "No",
+        ])
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    filename = f"{sprint.name}_export.xlsx"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/sprint/<int:sprint_id>/closure")
@@ -830,6 +890,49 @@ def api_backlog_story_delete():
     db.session.delete(story)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.get("/api/backlog/export")
+@login_required
+def api_backlog_export():
+    project_id = request.args.get("project_id")
+    if not project_id:
+        return jsonify({"error": "Project required"}), 400
+    project = Project.query.get(int(project_id))
+    if not project or project.created_by != session["user_id"]:
+        return jsonify({"error": "Invalid project"}), 400
+    features = BacklogFeature.query.filter_by(
+        project_id=project.id,
+        created_by=session["user_id"],
+    ).all()
+    feature_map = {f.id: f.feature_key for f in features}
+    stories = BacklogStory.query.filter_by(
+        project_id=project.id,
+        created_by=session["user_id"],
+    ).order_by(BacklogStory.created_at.desc()).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Feature ID", "User Story", "Size", "Points", "Days", "Closed"])
+    for story in stories:
+        writer.writerow([
+            feature_map.get(story.feature_id, ""),
+            story.name,
+            story.tshirt_size,
+            story.story_points,
+            story.days,
+            "Yes" if story.is_closed else "No",
+        ])
+
+    buffer = BytesIO(output.getvalue().encode("utf-8"))
+    safe_name = project.name.replace(" ", "_")
+    filename = f"{safe_name}_backlog.csv"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="text/csv",
+    )
 
 
 @app.post("/api/project/create")
