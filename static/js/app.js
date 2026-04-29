@@ -415,8 +415,16 @@ async function initSprintPlan() {
   const storyOtherFields = document.getElementById("storyOtherFields");
   const storyFeature = document.getElementById("storyFeature");
   const storyBacklog = document.getElementById("storyBacklog");
+  const addPeopleBtn = document.getElementById("addPeopleBtn");
+  const addUserStoryBtn = document.getElementById("addUserStoryBtn");
   if (sprintContainer) {
     isViewOnly = sprintContainer.dataset.viewOnly === "true";
+  }
+
+  function updateSprintActionButtons() {
+    const enabled = !!currentSprint && !isViewOnly;
+    if (addPeopleBtn) addPeopleBtn.disabled = !enabled;
+    if (addUserStoryBtn) addUserStoryBtn.disabled = !enabled;
   }
 
   if (createSprintBtn) {
@@ -450,6 +458,7 @@ async function initSprintPlan() {
       updateSprintHeading();
       updateSprintToggleButton();
       updateEditButton();
+      updateSprintActionButtons();
       updateSaveButton();
       setSprintModalMode("create");
       const sprintModalEl = document.getElementById("sprintModal");
@@ -485,6 +494,7 @@ async function initSprintPlan() {
         body: JSON.stringify({ id: currentSprint.id }),
       });
       await resetSprintView();
+      updateSprintActionButtons();
     });
   }
 
@@ -594,6 +604,16 @@ async function initSprintPlan() {
     if (!currentSprint || !storyFeature) return;
     const features = await fetchJson(`/api/backlog/feature/list?project_id=${currentSprint.project_id}`);
     storyFeature.innerHTML = "";
+    if (features.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No features found";
+      storyFeature.appendChild(option);
+      if (storyBacklog) {
+        storyBacklog.innerHTML = "";
+      }
+      return;
+    }
     features.forEach((feature) => {
       const option = document.createElement("option");
       option.value = feature.id;
@@ -672,6 +692,7 @@ async function initSprintPlan() {
       await loadBacklogFeatures();
       updateSaveButton();
       updateEditButton();
+      updateSprintActionButtons();
       applyViewOnlyMode();
     }
   } else {
@@ -679,6 +700,7 @@ async function initSprintPlan() {
     updateSprintToggleButton();
     updateSaveButton();
     updateEditButton();
+    updateSprintActionButtons();
     await loadBacklogFeatures();
     applyViewOnlyMode();
   }
@@ -1163,12 +1185,15 @@ async function initProjectPlan() {
   const featureCreateBtn = document.getElementById("featureCreateBtn");
   const featureSaveBtn = document.getElementById("featureSaveBtn");
   const featureCsvInput = document.getElementById("featureCsvInput");
+  const featureCsvBtn = document.getElementById("featureCsvBtn");
   const storyCreateBtn = document.getElementById("storyCreateBtn");
   const storySaveBtn = document.getElementById("storySaveBtn");
   const storyFeatureSelect = document.getElementById("storyFeatureSelect");
   const storySize = document.getElementById("storySize");
   const storyDays = document.getElementById("storyDays");
   const storyCsvInput = document.getElementById("storyCsvInput");
+  const storyCsvBtn = document.getElementById("storyCsvBtn");
+  const backlogStorySearch = document.getElementById("backlogStorySearch");
   const backlogError = document.getElementById("backlogError");
   const backlogErrorList = document.getElementById("backlogErrorList");
 
@@ -1180,6 +1205,8 @@ async function initProjectPlan() {
     backlogDeleteBtn.disabled = !enabled;
     featureCreateBtn.disabled = !enabled;
     storyCreateBtn.disabled = !enabled;
+    if (featureCsvBtn) featureCsvBtn.classList.toggle("disabled", !enabled);
+    if (storyCsvBtn) storyCsvBtn.classList.toggle("disabled", !enabled);
   }
 
   function updateBacklogTitles() {
@@ -1263,11 +1290,21 @@ async function initProjectPlan() {
     body.querySelectorAll(".story-delete").forEach((btn) => {
       btn.addEventListener("click", onDeleteStory);
     });
+    applyStoryFilter();
   }
 
   async function refreshBacklog() {
     await loadFeatures();
     await loadStories();
+  }
+
+  function applyStoryFilter() {
+    const query = backlogStorySearch?.value?.trim().toLowerCase() || "";
+    const rows = document.querySelectorAll("#backlogStoryTable tbody tr");
+    rows.forEach((row) => {
+      const storyCell = row.children[1]?.textContent?.toLowerCase() || "";
+      row.classList.toggle("d-none", query && !storyCell.includes(query));
+    });
   }
 
   function showBacklogErrors(errors) {
@@ -1577,6 +1614,10 @@ async function initProjectPlan() {
       const modal = bootstrap.Modal.getInstance(modalEl);
       if (modal) modal.hide();
     });
+  }
+
+  if (backlogStorySearch) {
+    backlogStorySearch.addEventListener("input", applyStoryFilter);
   }
 
   setBacklogActionsEnabled(false);
